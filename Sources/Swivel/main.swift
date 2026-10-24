@@ -18,10 +18,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Quit Swivel", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
 
+        let wheel = WheelPanel { [lastDropLine] name, urls in
+            let paths = urls.map(\.path)
+            log.info("drop slice=\(name, privacy: .public) urls=\(paths.joined(separator: ", "), privacy: .public)")
+            lastDropLine.title = "Last drop: \(name) ← \(paths.count == 1 ? paths[0] : "\(paths.count) files")"
+        }
         dragMonitor = DragMonitor(
             onState: { [dragLine] in dragLine.title = "Drag: \($0)" },
-            onTrigger: { _ in },
-            onEnd: {}
+            onTrigger: { wheel.show(at: $0) },
+            onEnd: { wheel.dragEnded() }
         )
     }
 }
