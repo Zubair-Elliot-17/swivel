@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let dragLine = NSMenuItem(title: "Drag: idle", action: nil, keyEquivalent: "")
     private let lastDropLine = NSMenuItem(title: "Last drop: none", action: nil, keyEquivalent: "")
+    private var dragMonitor: DragMonitor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -16,6 +17,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Swivel", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
+
+        dragMonitor = DragMonitor(
+            onState: { [dragLine] in dragLine.title = "Drag: \($0)" },
+            onTrigger: { _ in },
+            onEnd: {}
+        )
     }
 }
 
