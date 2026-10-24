@@ -28,7 +28,10 @@ final class WheelPanel {
     }
 
     func show(at point: NSPoint) {
+        // A wheel already up for this drag stays put; one awaiting its delayed hide belongs to the last drag.
+        if panel.isVisible && pendingHide == nil { return }
         pendingHide?.invalidate()
+        pendingHide = nil
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) ?? NSScreen.main else { return }
         panel.setFrame(Geometry.clampedFrame(size: wheelSize, center: point, visible: screen.visibleFrame), display: true)
         panel.orderFrontRegardless()
