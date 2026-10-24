@@ -20,3 +20,14 @@ One drop converts the whole batch, writes each output next to its source, never 
 
 ## Reuse
 ImageIO, vImage, UniformTypeIdentifiers (system); libwebp via libwebp-Xcode. Research: ~/.claude/research/swivel-m2-images.md.
+
+## Eng review (scoped, 2026-10-24)
+Feasibility: libwebp-Xcode builds under CLT for macOS 14 (researcher scratch build + ImageIO reads the output); task-group converter compiles clean under Swift 6. No requirement contradicts a constraint.
+
+Findings, all accepted:
+1. **Name race (P1).** `photo.png` and `photo.heic` in one batch both want `photo.jpg`; check-then-write lets one clobber the other, and `CGImageDestinationCreateWithURL` overwrites. Fix: encode to `Data` (`CGImageDestinationCreateWithData`), then claim the name with `Data.write(options: .withoutOverwriting)`, moving to the next candidate on "file exists". No partial files either.
+2. **Unbounded batch (P2).** 200 RAW-sized photos at once can blow memory. Cap the task group at 4 in flight.
+3. **Unwritable folder (P2).** A read-only volume or a DMG makes the write fail: report it as a failure with the reason; no fallback location in M2.
+4. **Inputs that aren't image files (P2).** Folders, aliases and PDFs: skip unless `CGImageSourceGetCount > 0` and the type conforms to `public.image`. PDF input is M3.
+5. **Concurrent drops (P3).** A second drop while one batch runs just adds its own jobs; the menu line shows the latest batch.
+6. **Test plan.** Unit-test in SwivelCore: naming (taken names, "photo 2" already existing, dotfiles, no extension, multi-dot names), skip rules, target extension map. Integration tests in SwivelCore: convert generated fixtures (an RGBA PNG, a rotated-EXIF JPEG) to each of the 5 formats, read back with ImageIO, assert the type, size, orientation-applied pixels for WebP, and orientation tag kept for the ImageIO path. Manual QA: real Finder drops, batch, collision, read-only folder.
