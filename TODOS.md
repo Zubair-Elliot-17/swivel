@@ -18,3 +18,16 @@ P3 hardening from the M1 review (2026-10-24). None blocks M1.
 
 ## Tests
 - **`wheelHasSixSlices` restates its own literal** (`GeometryTests.swift:18-20`): it only fails when the list is edited on purpose. Delete it, or keep it knowingly.
+
+## M2 review
+P3s from the M2 review (2026-10-25). None blocks M2.
+- **Pin libwebp-Xcode exactly** (`Package.swift`): `from: "1.6.0"` floats; pin `exact: "1.6.0"` / revision `2b5256c`.
+- **Full paths logged as public** (`main.swift:40`): log `lastPathComponent`, or the paths as `.private`.
+- **EXIF incl. GPS copied in ImageIO outputs** (`Converter.swift` encode): consider `kCGImageMetadataShouldExcludeGPS`.
+- **Type allowlist** (`Converter.swift` convert): restrict decoders with `CGImageSourceSetAllowableTypes`.
+- **Whole libwebp compiled, decoder included**: revisit if a WebP decode path is ever added.
+- **Partial output on disk full** (`Converter.swift` claim): write to a temp file, then `renamex_np(RENAME_EXCL)`.
+- **WebP job memory ~300-400 MB per 24 MP**: release the decoded image earlier; rerun QA row 8 with WebP.
+- **Reveal stays on the previous batch after a PDF drop** (`main.swift` drop).
+- **Overlapping batches**: an earlier batch's failure shows only in the log.
+- **Blocking ImageIO work on the Swift cooperative pool** (`Converter.convertBatch`): move to a dedicated queue if it starves other tasks.

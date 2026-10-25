@@ -10,7 +10,7 @@ Me, on my Mac: quick format swaps (HEIC from the phone to JPEG, screenshots to W
 One drop converts the whole batch, writes each output next to its source, never overwrites, and never blocks the wheel.
 
 ## Design
-- **ImageIO path (PNG, JPEG, HEIC, TIFF):** `CGImageSourceCreateWithURL` → `CGImageDestinationAddImageFromSource` at the primary index → `Finalize`. Keeps EXIF, orientation and ICC. JPEG/HEIC quality 0.85. Alpha to JPEG flattens on white (ImageIO default). First frame only. Delete the partial output if `Finalize` fails.
+- **ImageIO path (PNG, JPEG, HEIC, TIFF):** `CGImageSourceCreateWithURL` → `CGImageDestinationAddImageFromSource` at the primary index → `Finalize`. Keeps EXIF, orientation and ICC. JPEG/HEIC quality 0.85. Alpha to JPEG flattens on white (ImageIO default). First frame only. Encodes to memory first, so nothing is written if `Finalize` fails.
 - **WebP:** ImageIO can't write WebP on macOS 26 (checked with `CGImageDestinationCopyTypeIdentifiers`). Use the SwiftPM package `SDWebImage/libwebp-Xcode` (vendored libwebp 1.6.0, BSD-3), `WebPEncodeRGBA` lossy q75. Pixels are oriented by `CGImageSourceCreateThumbnailAtIndex(...WithTransform)` and turned into straight sRGB RGBA via vImage. No EXIF in WebP output (fine for now).
 - **Naming (SwivelCore, unit-tested):** `photo.png` → `photo.jpg`; if taken, `photo 2.jpg`, `photo 3.jpg`, ... like Finder "Keep Both". The extension for JPEG is `jpg`.
 - **Skips:** source already the target type ("already PNG"), non-images, unreadable files. Skips are counted, not errors.
