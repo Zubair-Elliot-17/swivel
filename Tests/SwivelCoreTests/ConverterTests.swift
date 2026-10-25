@@ -4,6 +4,7 @@ import ImageIO
 import Testing
 import UniformTypeIdentifiers
 import libwebp
+import zlib
 import SwivelCore
 
 @Test func libwebpLinks() {
@@ -218,6 +219,43 @@ func webPOutputIsWebP(fixture: Fixture) async throws {
 
     #expect(await Converter.convert(source, to: .webp) == .failed(source: source, reason: "too large for WebP (max 16383 px)"))
     #expect(try files(in: dir) == ["wide.png"])
+}
+
+/// A 1-bit grey PNG of side x side zero pixels, built by hand: a 225 MP bomb is ~27 KB on disk.
+/// With `fakeBody` the IDAT is empty, so ImageIO can't report the dimensions.
+private func writeFlatPNG(side: Int, in dir: URL, fakeBody: Bool = false) throws -> URL {
+    func be(_ v: Int) -> [UInt8] { [24, 16, 8, 0].map { UInt8(truncatingIfNeeded: v >> $0) } }
+    func chunk(_ type: String, _ body: [UInt8]) -> [UInt8] {
+        let typed = Array(type.utf8) + body
+        return be(body.count) + typed + be(Int(crc32(0, typed, uInt(typed.count))))
+    }
+    let raw = [UInt8](repeating: 0, count: side * (1 + (side + 7) / 8))  // filter byte + packed bits per row
+    var packed = [UInt8](repeating: 0, count: Int(compressBound(uLong(raw.count))))
+    var packedLen = uLongf(packed.count)
+    #expect(compress2(&packed, &packedLen, raw, uLong(raw.count), Z_BEST_COMPRESSION) == Z_OK)
+    let idat = fakeBody ? [0x78, 0x9C, 0x03, 0x00, 0, 0, 0, 1] : Array(packed[..<Int(packedLen)])
+    let png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] + chunk("IHDR", be(side) + be(side) + [1, 0, 0, 0, 0])
+        + chunk("IDAT", idat) + chunk("IEND", [])
+    let url = dir.appendingPathComponent("flat.png")
+    try Data(png).write(to: url)
+    return url
+}
+
+@Test(arguments: [ImageFormat.jpeg, .webp])
+func imagesOverThePixelCapFailBeforeDecoding(target: ImageFormat) async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try writeFlatPNG(side: 15000, in: dir)
+    #expect(await Converter.convert(source, to: target) == .failed(source: source, reason: "too large (max 200 MP)"))
+    #expect(try files(in: dir) == ["flat.png"])
+}
+
+@Test func imagesWithoutReadableDimensionsFail() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try writeFlatPNG(side: 1000, in: dir, fakeBody: true)
+    #expect(await Converter.convert(source, to: .jpeg) == .failed(source: source, reason: "couldn't read image"))
+    #expect(try files(in: dir) == ["flat.png"])
 }
 
 // MARK: Batch

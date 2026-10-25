@@ -52,7 +52,13 @@ public enum Converter {
 
     /// Encodes the primary image in memory, so a name is claimed only once the bytes exist.
     static func encode(_ src: CGImageSource, to target: ImageFormat) throws -> Data {
-        if target == .webp { return try encodeWebP(src) }
+        let props = CGImageSourceCopyPropertiesAtIndex(src, CGImageSourceGetPrimaryImageIndex(src), nil) as? [CFString: Any]
+        guard let width = props?[kCGImagePropertyPixelWidth] as? Int, let height = props?[kCGImagePropertyPixelHeight] as? Int,
+              width > 0, height > 0
+        else { throw ConvertError("couldn't read image") }
+        // 200 MP is ~800 MB as RGBA; with 4 in flight that stays a few GB, and it stops small-file bombs.
+        guard width * height <= 200_000_000 else { throw ConvertError("too large (max 200 MP)") }
+        if target == .webp { return try encodeWebP(src, side: max(width, height)) }
         let data = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(data as CFMutableData, target.utType.identifier as CFString, 1, nil)
         else { throw ConvertError("can't write \(target.rawValue)") }
@@ -64,17 +70,15 @@ public enum Converter {
     }
 
     /// ImageIO can't write WebP: bake orientation into upright straight-alpha sRGB pixels, then libwebp lossy q75.
-    static func encodeWebP(_ src: CGImageSource) throws -> Data {
+    static func encodeWebP(_ src: CGImageSource, side: Int) throws -> Data {
         let index = CGImageSourceGetPrimaryImageIndex(src)
-        let props = CGImageSourceCopyPropertiesAtIndex(src, index, nil) as? [CFString: Any]
-        let side = max(props?[kCGImagePropertyPixelWidth] as? Int ?? 0, props?[kCGImagePropertyPixelHeight] as? Int ?? 0)
         guard side <= Int(WEBP_MAX_DIMENSION) else { throw ConvertError("too large for WebP (max \(WEBP_MAX_DIMENSION) px)") }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceThumbnailMaxPixelSize: side,
         ]
-        guard side > 0, let image = CGImageSourceCreateThumbnailAtIndex(src, index, options as CFDictionary),
+        guard let image = CGImageSourceCreateThumbnailAtIndex(src, index, options as CFDictionary),
               let format = vImage_CGImageFormat(
                   bitsPerComponent: 8, bitsPerPixel: 32, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
                   bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue))
