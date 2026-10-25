@@ -31,3 +31,5 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **Reveal stays on the previous batch after a PDF drop** (`main.swift` drop).
 - **Overlapping batches**: an earlier batch's failure shows only in the log.
 - **Blocking ImageIO work on the Swift cooperative pool** (`Converter.convertBatch`): move to a dedicated queue if it starves other tasks.
+- **Unchecked `width * height`** (`Converter.swift:63`): use `multipliedReportingOverflow`; ImageIO didn't report such sizes in a probe, so not reachable today.
+- **`ClaimErrorTests` overlaps `readOnlyFolderFailsWithReason`**: delete it, or keep it knowingly as the named catch-all guard.
