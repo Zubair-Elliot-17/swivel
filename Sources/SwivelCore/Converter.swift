@@ -27,7 +27,8 @@ public enum Converter {
             let data = try encode(src!, to: target)
             return .converted(source: source, output: try claim(data, source: source, ext: target.fileExtension))
         } catch {
-            return .failed(source: source, reason: error.localizedDescription)
+            let full = error.localizedDescription, short = menuReason(for: error)
+            return .failed(source: source, reason: short, detail: short == full ? nil : full)
         }
     }
 

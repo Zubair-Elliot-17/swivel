@@ -40,3 +40,23 @@ func countsSumToInput(outcomes: [Outcome]) {
     #expect(BatchSummary(withSkip).outputs == [url("a.jpg"), url("photo.jpg")])
     #expect(BatchSummary(allSkipped).outputs.isEmpty)
 }
+
+@Test(arguments: [
+    (CocoaError(.fileWriteNoPermission) as Error, "no permission"),
+    (CocoaError(.fileWriteOutOfSpace), "disk full"),
+    (CocoaError(.fileWriteVolumeReadOnly), "read-only volume"),
+    (POSIXError(.ENOSPC), "disk full"),
+    (POSIXError(.EACCES), "no permission"),
+    (POSIXError(.EROFS), "read-only volume"),
+    (NSError(domain: "x", code: 1, userInfo: [NSLocalizedDescriptionKey: "too large (max 200 MP)"]), "too large (max 200 MP)"),
+    (NSError(domain: "x", code: 1, userInfo: [NSLocalizedDescriptionKey: String(repeating: "a", count: 61)]),
+     String(repeating: "a", count: 59) + "…"),
+])
+func menuReasonIsShort(error: Error, expected: String) {
+    #expect(menuReason(for: error) == expected)
+}
+
+@Test func sixtyCharReasonIsKept() {
+    let sixty = String(repeating: "b", count: 60)
+    #expect(menuReason(for: NSError(domain: "x", code: 1, userInfo: [NSLocalizedDescriptionKey: sixty])) == sixty)
+}

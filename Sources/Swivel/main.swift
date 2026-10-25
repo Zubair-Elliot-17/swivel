@@ -62,8 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             log.info("converted \(source.lastPathComponent, privacy: .public) -> \(output.lastPathComponent, privacy: .public)")
         case .skipped(let source, let reason):
             log.info("skipped \(source.lastPathComponent, privacy: .public): \(reason.description, privacy: .public)")
-        case .failed(let source, let reason):
-            log.info("failed \(source.lastPathComponent, privacy: .public): \(reason, privacy: .public)")
+        case .failed(let source, let reason, let detail):
+            log.info("failed \(source.lastPathComponent, privacy: .public): \(detail ?? reason, privacy: .public)")
         }
     }
 

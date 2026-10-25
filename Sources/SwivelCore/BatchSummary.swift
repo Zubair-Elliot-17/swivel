@@ -4,7 +4,24 @@ import Foundation
 public enum Outcome: Equatable, Sendable {
     case converted(source: URL, output: URL)
     case skipped(source: URL, SkipReason)
-    case failed(source: URL, reason: String)
+    /// `reason` is short for the menu; `detail` is the full error text for the log when it differs.
+    case failed(source: URL, reason: String, detail: String? = nil)
+}
+
+/// Short menu text for a failure: common write errors by name, anything else cut to 60 characters.
+public func menuReason(for error: Error) -> String {
+    let ns = error as NSError
+    switch (ns.domain, ns.code) {
+    case (NSCocoaErrorDomain, CocoaError.fileWriteNoPermission.rawValue), (NSPOSIXErrorDomain, Int(EACCES)):
+        return "no permission"
+    case (NSCocoaErrorDomain, CocoaError.fileWriteOutOfSpace.rawValue), (NSPOSIXErrorDomain, Int(ENOSPC)):
+        return "disk full"
+    case (NSCocoaErrorDomain, CocoaError.fileWriteVolumeReadOnly.rawValue), (NSPOSIXErrorDomain, Int(EROFS)):
+        return "read-only volume"
+    default:
+        let text = ns.localizedDescription
+        return text.count > 60 ? text.prefix(59) + "…" : text
+    }
 }
 
 /// One-line menu text for a batch; names files only, never full paths.
@@ -19,7 +36,7 @@ public struct BatchSummary {
             switch outcome {
             case .converted(_, let output): outputs.append(output)
             case .skipped(_, let reason): skips.append(reason)
-            case .failed(let source, let reason):
+            case .failed(let source, let reason, _):
                 failed += 1
                 if failure == nil { failure = (source, reason) }
             }

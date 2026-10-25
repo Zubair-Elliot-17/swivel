@@ -175,12 +175,14 @@ func nonImagesAreSkipped(name: String) async throws {
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
 
     let outcome = await Converter.convert(source, to: .jpeg)
-    guard case .failed(let failed, let reason) = outcome else {
+    guard case .failed(let failed, let reason, let detail) = outcome else {
         Issue.record("expected failure, got \(outcome)")
         return
     }
     #expect(failed == source)
-    #expect(!reason.isEmpty)
+    #expect(reason == "no permission")
+    #expect(detail?.contains("permission") == true && detail != reason)  // full sentence kept for the log
+    #expect(BatchSummary([outcome]).menuLine == "Failed: photo.png: no permission (0 of 1 converted)")
     #expect(try files(in: dir) == ["photo.png"])
 }
 
