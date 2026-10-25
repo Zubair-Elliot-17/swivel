@@ -219,3 +219,47 @@ func webPOutputIsWebP(fixture: Fixture) async throws {
     #expect(await Converter.convert(source, to: .webp) == .failed(source: source, reason: "too large for WebP (max 16383 px)"))
     #expect(try files(in: dir) == ["wide.png"])
 }
+
+// MARK: Batch
+
+@Test func batchSourcesSharingAStemNeverClobber() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let png = try write(.png, in: dir)
+    // Build photo.heic and photo.tiff from the PNG, then occupy photo.jpg.
+    var sources = [png]
+    for format in [ImageFormat.heic, .tiff] {
+        let url = dir.appendingPathComponent("photo.\(format.fileExtension)")
+        #expect(await Converter.convert(png, to: format) == .converted(source: png, output: url))
+        sources.append(url)
+    }
+    let existing = dir.appendingPathComponent("photo.jpg")
+    let original = Data("keep me".utf8)
+    try original.write(to: existing)
+
+    let outcomes = await Converter.convertBatch(sources, to: .jpeg)
+    let outputs = outcomes.compactMap { outcome -> String? in
+        guard case .converted(_, let output) = outcome else { return nil }
+        return output.lastPathComponent
+    }
+    #expect(outputs.count == 3)
+    #expect(Set(outputs) == ["photo 2.jpg", "photo 3.jpg", "photo 4.jpg"])
+    #expect(try Data(contentsOf: existing) == original)
+}
+
+@Test func batchReturnsOutcomesInInputOrder() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let sources = try (0..<10).map { try write(.png, in: dir, name: "p\($0)") }
+    let outcomes = await Converter.convertBatch(sources, to: .jpeg)
+    #expect(outcomes == sources.map { .converted(source: $0, output: $0.deletingPathExtension().appendingPathExtension("jpg")) })
+}
+
+@Test(arguments: [0, 1])
+func emptyBatchOrTinyCapStillWorks(cap: Int) async throws {
+    #expect(await Converter.convertBatch([], to: .png, maxInFlight: cap) == [])
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let sources = try (0..<3).map { try write(.png, in: dir, name: "p\($0)") }
+    #expect(await Converter.convertBatch(sources, to: .tiff, maxInFlight: cap).count == 3)
+}

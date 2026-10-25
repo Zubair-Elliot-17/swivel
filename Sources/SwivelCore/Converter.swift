@@ -27,6 +27,29 @@ public enum Converter {
         }
     }
 
+    /// Converts `urls` with at most `maxInFlight` decodes at once (each holds a full bitmap); keeps input order.
+    public static func convertBatch(_ urls: [URL], to target: ImageFormat, maxInFlight: Int = 4) async -> [Outcome] {
+        await withTaskGroup(of: (Int, Outcome).self) { group in
+            var results = [Outcome?](repeating: nil, count: urls.count)
+            var next = 0
+            // Sliding window: seed the cap, then start one more as each finishes.
+            while next < min(max(maxInFlight, 1), urls.count) {
+                let i = next
+                group.addTask { (i, await convert(urls[i], to: target)) }
+                next += 1
+            }
+            while let (i, outcome) = await group.next() {
+                results[i] = outcome
+                if next < urls.count {
+                    let j = next
+                    group.addTask { (j, await convert(urls[j], to: target)) }
+                    next += 1
+                }
+            }
+            return results.map { $0! }
+        }
+    }
+
     /// Encodes the primary image in memory, so a name is claimed only once the bytes exist.
     static func encode(_ src: CGImageSource, to target: ImageFormat) throws -> Data {
         if target == .webp { return try encodeWebP(src) }
