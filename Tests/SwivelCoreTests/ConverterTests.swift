@@ -14,7 +14,7 @@ import SwivelCore
 // MARK: Fixtures
 
 enum Fixture: String, CaseIterable, Sendable {
-    /// 16x8 RGBA PNG: left half transparent, right half opaque green.
+    /// 16x8 RGBA PNG: left half transparent, right half green, opaque except x 12-15 at 50% alpha.
     case png
     /// 40x20 JPEG tagged orientation 6: left half red, right half blue (displays 20x40, red on top).
     case jpeg
@@ -49,6 +49,11 @@ func write(_ fixture: Fixture, in dir: URL, name: String = "photo") throws -> UR
         ctx.setFillColor(red: 0, green: 0, blue: 1, alpha: 1)
     }
     ctx.fill(right)
+    if fixture == .png {
+        ctx.clear(CGRect(x: 12, y: 0, width: 4, height: h))
+        ctx.setFillColor(red: 0, green: 1, blue: 0, alpha: 0.5)
+        ctx.fill(CGRect(x: 12, y: 0, width: 4, height: h))
+    }
     let url = dir.appendingPathComponent("\(name).\(fixture.format.fileExtension)")
     let dest = try #require(CGImageDestinationCreateWithURL(url as CFURL, fixture.format.utType.identifier as CFString, 1, nil))
     let props: [CFString: Any] = fixture == .jpeg ? [kCGImagePropertyOrientation: 6] : [:]
@@ -215,7 +220,10 @@ func webPOutputIsWebP(fixture: Fixture) async throws {
     _ = await Converter.convert(try write(.png, in: dir), to: .webp)
     let out = try ReadBack(dir.appendingPathComponent("photo.webp"))
     #expect(out.pixel(2, 4)[3] <= 2)
-    #expect(out.pixel(12, 4)[3] >= 253)
+    #expect(out.pixel(10, 4)[3] >= 253)
+    // Read back premultiplied: straight 50% green gives ~128; a premultiplied mix-up gives ~64.
+    let half = out.pixel(14, 4)
+    #expect((118...138).contains(half[3]) && (110...145).contains(half[1]), "got \(half)")
 }
 
 @Test func webPRejectsImagesOverItsSizeLimit() async throws {
