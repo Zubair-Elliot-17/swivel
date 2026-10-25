@@ -158,6 +158,7 @@ func nonImagesAreSkipped(name: String) async throws {
     let source = dir.appendingPathComponent(name)
     if name.hasSuffix("folder") { try FileManager.default.createDirectory(at: source, withIntermediateDirectories: false) }
     if name == "locked folder" { try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: source.path) }
+    defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: source.path) }  // so cleanUp can remove it
     if name == "notes.txt" { try Data("hello".utf8).write(to: source) }
     let before = try files(in: dir)
     #expect(await Converter.convert(source, to: .jpeg) == .skipped(source: source, .notImage))
