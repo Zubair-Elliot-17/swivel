@@ -37,11 +37,13 @@ public enum OutputName {
 
 public enum SkipReason: Equatable, Sendable, CustomStringConvertible {
     case notImage
+    case unreadable
     case already(ImageFormat)
 
     public var description: String {
         switch self {
         case .notImage: "not an image"
+        case .unreadable: "can't read"
         case .already(let format): "already \(format.rawValue)"
         }
     }

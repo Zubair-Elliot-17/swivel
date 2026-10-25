@@ -48,7 +48,7 @@ func skipRules(type: UTType?, count: Int, target: ImageFormat, expected: SkipRea
     #expect(skipReason(sourceType: type, imageCount: count, target: target) == expected)
 }
 
-@Test(arguments: [(SkipReason.notImage, "not an image"), (.already(.png), "already PNG"), (.already(.webp), "already WebP")])
+@Test(arguments: [(SkipReason.notImage, "not an image"), (.already(.png), "already PNG"), (.already(.webp), "already WebP"), (.unreadable, "can't read")])
 func skipReasonText(reason: SkipReason, text: String) {
     #expect(reason.description == text)
 }

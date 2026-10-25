@@ -146,16 +146,26 @@ func sameTypeIsSkippedAndWritesNothing(fixture: Fixture) async throws {
     #expect(try files(in: dir) == before)
 }
 
-@Test(arguments: ["folder", "notes.txt", "missing.png"])
+@Test(arguments: ["folder", "locked folder", "notes.txt", "missing.png"])
 func nonImagesAreSkipped(name: String) async throws {
     let dir = try makeScratch()
     defer { cleanUp(dir) }
     let source = dir.appendingPathComponent(name)
-    if name == "folder" { try FileManager.default.createDirectory(at: source, withIntermediateDirectories: false) }
+    if name.hasSuffix("folder") { try FileManager.default.createDirectory(at: source, withIntermediateDirectories: false) }
+    if name == "locked folder" { try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: source.path) }
     if name == "notes.txt" { try Data("hello".utf8).write(to: source) }
     let before = try files(in: dir)
     #expect(await Converter.convert(source, to: .jpeg) == .skipped(source: source, .notImage))
     #expect(try files(in: dir) == before)
+}
+
+@Test func unreadableImageIsSkippedAsUnreadable() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try write(.png, in: dir)
+    try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: source.path)
+    #expect(await Converter.convert(source, to: .jpeg) == .skipped(source: source, .unreadable))
+    #expect(try files(in: dir) == ["photo.png"])
 }
 
 @Test func readOnlyFolderFailsWithReason() async throws {

@@ -17,7 +17,11 @@ public enum Converter {
         let type = src.flatMap(CGImageSourceGetType).flatMap { UTType($0 as String) }
         let count = src.map(CGImageSourceGetCount) ?? 0
         if let reason = skipReason(sourceType: type, imageCount: count, target: target) {
-            return .skipped(source: source, reason)
+            // A file that exists but won't open (no read permission) isn't "not an image"; folders stay .notImage.
+            var isDir: ObjCBool = false
+            let unreadable = reason == .notImage && FileManager.default.fileExists(atPath: source.path, isDirectory: &isDir)
+                && !isDir.boolValue && !FileManager.default.isReadableFile(atPath: source.path)
+            return .skipped(source: source, unreadable ? .unreadable : reason)
         }
         do {
             let data = try encode(src!, to: target)
