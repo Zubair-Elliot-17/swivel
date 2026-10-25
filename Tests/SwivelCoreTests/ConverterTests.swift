@@ -172,3 +172,50 @@ func nonImagesAreSkipped(name: String) async throws {
     #expect(!reason.isEmpty)
     #expect(try files(in: dir) == ["photo.png"])
 }
+
+// MARK: WebP path
+
+@Test(arguments: Fixture.allCases)
+func webPOutputIsWebP(fixture: Fixture) async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try write(fixture, in: dir)
+    let expected = dir.appendingPathComponent("photo.webp")
+    #expect(await Converter.convert(source, to: .webp) == .converted(source: source, output: expected))
+    #expect(try ReadBack(expected).type == "org.webmproject.webp")
+}
+
+@Test func webPBakesInOrientation() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    _ = await Converter.convert(try write(.jpeg, in: dir), to: .webp)
+    let out = try ReadBack(dir.appendingPathComponent("photo.webp"))
+    #expect((out.width, out.height) == (20, 40))
+    let top = out.pixel(10, 5), bottom = out.pixel(10, 35)
+    #expect(top[0] > 200 && top[2] < 60)
+    #expect(bottom[2] > 200 && bottom[0] < 60)
+}
+
+@Test func webPKeepsAlpha() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    _ = await Converter.convert(try write(.png, in: dir), to: .webp)
+    let out = try ReadBack(dir.appendingPathComponent("photo.webp"))
+    #expect(out.pixel(2, 4)[3] <= 2)
+    #expect(out.pixel(12, 4)[3] >= 253)
+}
+
+@Test func webPRejectsImagesOverItsSizeLimit() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let ctx = try #require(CGContext(
+        data: nil, width: 16384, height: 1, bitsPerComponent: 8, bytesPerRow: 0,
+        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    let source = dir.appendingPathComponent("wide.png")
+    let dest = try #require(CGImageDestinationCreateWithURL(source as CFURL, UTType.png.identifier as CFString, 1, nil))
+    CGImageDestinationAddImage(dest, try #require(ctx.makeImage()), nil)
+    #expect(CGImageDestinationFinalize(dest))
+
+    #expect(await Converter.convert(source, to: .webp) == .failed(source: source, reason: "too large for WebP (max 16383 px)"))
+    #expect(try files(in: dir) == ["wide.png"])
+}
