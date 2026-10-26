@@ -5,7 +5,7 @@ import SwivelCore
 let log = Logger(subsystem: "dev.zubair.swivel", category: "drag")
 
 /// Watches other apps' drags via global mouse monitors and the drag pasteboard (no Accessibility).
-/// While a file drag is live it polls Shift/Ctrl and reports a rising edge as a trigger.
+/// Polls from mouse-down; once the drag carries file URLs, a Shift/Ctrl rising edge is a trigger.
 @MainActor
 final class DragMonitor {
     private let onState: (String) -> Void
@@ -13,10 +13,10 @@ final class DragMonitor {
     private let onEnd: () -> Void
     private let pasteboard = NSPasteboard(name: .drag)
     private var startCount = 0
-    private var checked = true  // nothing to check until the first mouse-down snapshot
+    private var lastCount = 0
     private var timer: Timer?
-    private var shift = ModifierEdge(initiallyDown: false)
-    private var control = ModifierEdge(initiallyDown: false)
+    private var trigger = DragTrigger(shift: false, control: false)
+    private(set) var isLive = false
 
     init(onState: @escaping (String) -> Void, onTrigger: @escaping (NSPoint) -> Void, onEnd: @escaping () -> Void) {
         self.onState = onState
@@ -26,9 +26,6 @@ final class DragMonitor {
         NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
             MainActor.assumeIsolated { self?.mouseDown() }
         }
-        NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDragged) { [weak self] _ in
-            MainActor.assumeIsolated { self?.mouseDragged() }
-        }
         NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
             MainActor.assumeIsolated { self?.end() }
         }
@@ -37,34 +34,32 @@ final class DragMonitor {
     private func mouseDown() {
         end()
         startCount = pasteboard.changeCount
-        checked = false
-    }
-
-    // Fires at pointer rate, so only compare changeCount; read types once per drag (D7).
-    private func mouseDragged() {
-        guard !checked, pasteboard.changeCount != startCount else { return }
-        checked = true
-        // Promise-only drags (Photos, Mail) carry no .fileURL and are ignored in M1 (D8).
-        guard pasteboard.types?.contains(.fileURL) == true else {
-            setState("non-file drag")
-            return
-        }
-        setState("file drag seen")
+        lastCount = startCount
+        // Baseline at mouse-down so Shift held from a multi-select never fires (D2).
         let flags = CGEventSource.flagsState(.combinedSessionState)
-        shift = ModifierEdge(initiallyDown: flags.contains(.maskShift))
-        control = ModifierEdge(initiallyDown: flags.contains(.maskControl))
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+        trigger = DragTrigger(shift: flags.contains(.maskShift), control: flags.contains(.maskControl))
+        // Common mode keeps polling while a run loop is in event tracking.
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 
     private func poll() {
         // The drag is over once the left button is up: a drop, a release elsewhere or Esc (D1).
         guard NSEvent.pressedMouseButtons & 1 != 0 else { return end() }
+        // Finder bumps changeCount before it writes its types, so re-read on every change until live.
+        if !isLive, pasteboard.changeCount != lastCount {
+            lastCount = pasteboard.changeCount
+            // Promise-only drags (Photos, Mail) carry no .fileURL and are ignored (D8).
+            if pasteboard.types?.contains(.fileURL) == true {
+                isLive = true
+                setState("file drag seen")
+            }
+        }
         let flags = CGEventSource.flagsState(.combinedSessionState)
-        let shiftEdge = shift.update(down: flags.contains(.maskShift))
-        let controlEdge = control.update(down: flags.contains(.maskControl))
-        if shiftEdge || controlEdge {
+        if trigger.tick(shift: flags.contains(.maskShift), control: flags.contains(.maskControl), live: isLive) {
             log.info("trigger")
             setState("wheel requested")
             onTrigger(NSEvent.mouseLocation)
@@ -75,7 +70,12 @@ final class DragMonitor {
         guard let timer else { return }
         timer.invalidate()
         self.timer = nil
-        onEnd()
+        if isLive {
+            isLive = false
+            onEnd()
+        } else if pasteboard.changeCount != startCount, pasteboard.types?.contains(.fileURL) != true {
+            setState("non-file drag")
+        }
     }
 
     private func setState(_ state: String) {
