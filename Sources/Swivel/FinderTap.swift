@@ -18,8 +18,11 @@ final class FinderTap {
     private(set) var status = TapStatus.needsAccess
     private var detector = TapDetector()
     private var checking = false
+    // Runs on main: a hung Finder must fail fast (-1712) instead of the 2-minute default AE timeout.
     private lazy var script = NSAppleScript(source: """
-        tell application "Finder" to set s to selection as alias list
+        with timeout of 2 seconds
+            tell application "Finder" to set s to selection as alias list
+        end timeout
         set out to {}
         repeat with a in s
             set end of out to POSIX path of a
