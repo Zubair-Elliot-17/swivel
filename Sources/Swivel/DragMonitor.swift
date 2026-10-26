@@ -14,7 +14,6 @@ final class DragMonitor {
     private let onEnd: () -> Void
     private let pasteboard = NSPasteboard(name: .drag)
     private var startCount = 0
-    private var lastCount = 0
     private var timer: Timer?
     private var trigger = DragTrigger(shift: false, control: false)
     private(set) var isLive = false
@@ -37,7 +36,6 @@ final class DragMonitor {
     private func mouseDown() {
         end()
         startCount = pasteboard.changeCount
-        lastCount = startCount
         // Baseline at mouse-down so Shift held from a multi-select never fires (D2).
         let flags = CGEventSource.flagsState(.combinedSessionState)
         trigger = DragTrigger(shift: flags.contains(.maskShift), control: flags.contains(.maskControl))
@@ -52,9 +50,8 @@ final class DragMonitor {
     private func poll() {
         // The drag is over once the left button is up: a drop, a release elsewhere or Esc (D1).
         guard NSEvent.pressedMouseButtons & 1 != 0 else { return end() }
-        // Finder bumps changeCount before it writes its types, so re-read on every change until live.
-        if !isLive, pasteboard.changeCount != lastCount {
-            lastCount = pasteboard.changeCount
+        // Finder bumps changeCount before it writes its types, so re-read every tick once it moved, until live.
+        if !isLive, pasteboard.changeCount != startCount {
             // Promise-only drags (Photos, Mail) carry no .fileURL and are ignored (D8).
             if pasteboard.types?.contains(.fileURL) == true {
                 isLive = true
