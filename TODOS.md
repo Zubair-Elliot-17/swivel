@@ -3,8 +3,8 @@
 P3 hardening from the M1 review (2026-10-24). None blocks M1.
 
 ## Drag and wheel
-- **Re-read drag types per change, not per drag** (`DragMonitor.swift:45-48`): a source that clears the pasteboard before writing could be marked "non-file drag" for good. Swap `checked` for `lastCheckedCount`.
-- **Timers in common run-loop mode** (`DragMonitor.swift:56`, `WheelPanel.swift:41`): if the run loop is in event-tracking mode, the hide poll stalls. Add the timers with `RunLoop.main.add(_, forMode: .common)`.
+- ~~**Re-read drag types per change, not per drag**~~ Done in M2b (poll re-reads types on each changeCount change).
+- ~~**Timers in common run-loop mode**~~ Done in M2b (drag poll and hide timer).
 - **Screen lookup at top/right edge** (`WheelPanel.swift:32`): `CGRect.contains` excludes `maxX/maxY`, so a second display's top row falls back to the main screen. Use `NSMouseInRect`.
 - **Stale highlight after a refused drop** (`WheelPanel.swift` `show(at:)`): a new drag within 0.5 s shows the old highlight until the next drag update. The drop slice is still correct. Set `view.highlight = nil` when repositioning.
 
@@ -13,8 +13,8 @@ P3 hardening from the M1 review (2026-10-24). None blocks M1.
 - **Show only the filename in the menu** (`main.swift:273`): the full path shows during screen sharing, and control or bidi characters in names can garble the line.
 
 ## Build
-- **Quote the plist heredoc** (`scripts/bundle.sh:10`): use `<<'PLIST'` so a future `$` can't expand.
-- **Hardened runtime** (`scripts/bundle.sh:24`): `codesign --options runtime`, plus `--timestamp` once signed with a real identity.
+- ~~**Quote the plist heredoc**~~ Done in M2b.
+- **Hardened runtime** (`scripts/bundle.sh:24`): `codesign --options runtime`, plus `--timestamp` once signed with a real identity. The Finder tap then needs the `com.apple.security.automation.apple-events` entitlement.
 
 ## Tests
 - **`wheelHasSixSlices` restates its own literal** (`GeometryTests.swift:18-20`): it only fails when the list is edited on purpose. Delete it, or keep it knowingly.
@@ -38,3 +38,9 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **QA row 6 not confirmed by hand**: the read-only drop was never run from a truly read-only place (the iCloud Desktop made the 555 test folder writable). Unit test `readOnlyFolderFailsWithReason` covers it; re-run from a read-only DMG.
 - **Same-format drop reads like an error**: dropping `screenshot.png` on PNG says "already PNG". Consider clearer wording, or re-encode as a copy.
 - **Drag + Shift still sometimes needs a re-try** on the M2 build: fixed in M2b (`feat/m2b-trigger`), needs its manual QA rows 1-3.
+
+## M2b Finder tap
+- **Stable self-signed signing identity** (`scripts/bundle.sh`): ad-hoc builds get a new cdhash, so the Automation grant is lost on each rebuild (README has the `tccutil reset` workaround).
+- **Esc to dismiss the click wheel**: needs the panel to be key; check first that Finder gets keyboard focus back after `orderOut`.
+- **Keyboard slice pick** in click mode (arrows/Return), same key-focus caveat as Esc.
+- **flagsChanged canary log**: global flagsChanged without Accessibility is undocumented; log "tap monitor: no flagsChanged seen" when the drag poll sees a Shift edge the monitor missed.
