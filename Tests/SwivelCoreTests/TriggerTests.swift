@@ -70,6 +70,12 @@ let tapCases: [TapCase] = [
     TapCase(name: "tainted press does not taint the next", events: [(true, false, true, 1), (false, false, false, 1.2),
                                                                     (true, false, false, 2), (false, false, false, 2.25)],
             taps: [Tap(held: 0.25)]),
+    // Ctrl released first: the both-keys taint must stick once the set is back to one key.
+    TapCase(name: "shift, ctrl, ctrl up, shift up", events: [(true, false, false, 1), (true, true, false, 1.1),
+                                                             (true, false, false, 1.2), (false, false, false, 1.3)], taps: []),
+    // Caps Lock after a tap must not replay the finished press.
+    TapCase(name: "tap then caps lock", events: [(true, false, false, 1), (false, false, false, 1.25),
+                                                 (false, false, false, 3)], taps: [Tap(held: 0.25)]),
 ]
 
 @Test(arguments: tapCases)
@@ -93,6 +99,8 @@ let ruleCases: [(String, RuleInput, String?)] = [
     ("key at held + 0.5", RuleInput(sinceKeyDown: 0.75), "key typed"),
     ("left down just before press", RuleInput(sinceLeftDown: 0.251), nil),
     ("left down at press", RuleInput(sinceLeftDown: 0.25), "mouse clicked"),
+    ("right down just before press", RuleInput(sinceRightDown: 0.251), nil),
+    ("right down at press", RuleInput(sinceRightDown: 0.25), "mouse clicked"),
     ("right down during hold", RuleInput(sinceRightDown: 0.1), "mouse clicked"),
     ("button down", RuleInput(buttonsDown: 1), "button down"),
     ("drag live", RuleInput(dragLive: true), "drag live"),
