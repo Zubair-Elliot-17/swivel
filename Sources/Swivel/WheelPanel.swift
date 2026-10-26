@@ -6,6 +6,7 @@ private let innerRadius: CGFloat = 30
 private let outerRadius: CGFloat = 110
 
 /// Borderless, non-activating panel that shows the wheel under the cursor without stealing focus.
+/// Drag mode takes a drop; click mode (Finder tap) takes a click and never makes the panel key.
 @MainActor
 final class WheelPanel {
     private let panel = NSPanel(
@@ -25,13 +26,42 @@ final class WheelPanel {
             onDrop(name, urls)
             self?.hide()
         }
+        view.onDismiss = { [weak self] in self?.hide() }
+        // Own-app clicks never reach a global monitor, so this only sees clicks outside the wheel.
+        NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated { _ = self?.hideClickMode() }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { _ = self?.hideClickMode() }
+        }
+    }
+
+    /// Opens the wheel at `point` for `urls` already chosen (Finder selection); a click picks the slice.
+    func showForClick(at point: NSPoint, urls: [URL]) {
+        hide()
+        view.clickURLs = urls
+        place(at: point)
+    }
+
+    /// Hides a click-mode wheel; returns whether one was up.
+    func hideClickMode() -> Bool {
+        guard view.clickURLs != nil else { return false }
+        hide()
+        return true
     }
 
     func show(at point: NSPoint) {
         // A wheel already up for this drag stays put; one awaiting its delayed hide belongs to the last drag.
+        if view.clickURLs != nil { hide() }
         if panel.isVisible && pendingHide == nil { return }
         pendingHide?.invalidate()
         pendingHide = nil
+        place(at: point)
+    }
+
+    private func place(at point: NSPoint) {
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) ?? NSScreen.main else { return }
         panel.setFrame(Geometry.clampedFrame(size: wheelSize, center: point, visible: screen.visibleFrame), display: true)
         panel.orderFrontRegardless()
@@ -40,23 +70,38 @@ final class WheelPanel {
     /// Called when the mouse button is up. A drop over a slice may still be on its way,
     /// so give performDragOperation a moment before hiding.
     func dragEnded() {
+        guard view.clickURLs == nil else { return }
         guard view.highlight != nil else { return hide() }
-        pendingHide = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.5, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.hide() }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        pendingHide = timer
     }
 
     func hide() {
         pendingHide?.invalidate()
         pendingHide = nil
         view.highlight = nil
+        view.clickURLs = nil
         panel.orderOut(nil)
     }
 }
 
 /// Drop target that maps the drag location to a slice and accepts a copy only on a slice (D4).
+/// With `clickURLs` set it is a click target instead: hover highlights, a click converts or dismisses.
 final class WheelView: NSView {
     var onDrop: ((String, [URL]) -> Void)?
+    var onDismiss: (() -> Void)?
+    var clickURLs: [URL]? {
+        didSet { setAccessibilityChildren(clickURLs == nil ? nil : sliceElements) }
+    }
+    private lazy var sliceElements: [NSAccessibilityElement] = Geometry.sliceNames.indices.map { i in
+        let c = labelCenter(i)
+        return SliceElement(
+            label: "Convert to \(Geometry.sliceNames[i])", frame: NSRect(x: c.x - 22, y: c.y - 12, width: 44, height: 24),
+            parent: self, press: { [weak self] in self?.pick(i) })
+    }
     var highlight: Int? {
         didSet { if highlight != oldValue { needsDisplay = true } }
     }
@@ -64,7 +109,11 @@ final class WheelView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         registerForDraggedTypes([.fileURL])
+        setAccessibilityRole(.group)
         setAccessibilityLabel("Swivel format wheel")
+        // .activeAlways: Swivel is never the active app, so hover needs it.
+        addTrackingArea(NSTrackingArea(
+            rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
     }
 
     required init?(coder: NSCoder) {
@@ -72,9 +121,41 @@ final class WheelView: NSView {
     }
 
     private func slice(for sender: NSDraggingInfo) -> Int? {
+        slice(at: sender.draggingLocation)
+    }
+
+    private func slice(at windowPoint: NSPoint) -> Int? {
         Geometry.slice(
-            at: convert(sender.draggingLocation, from: nil), center: CGPoint(x: bounds.midX, y: bounds.midY),
+            at: convert(windowPoint, from: nil), center: CGPoint(x: bounds.midX, y: bounds.midY),
             inner: innerRadius, outer: outerRadius, count: Geometry.sliceNames.count)
+    }
+
+    /// Centre of slice `i`'s label, in view coordinates.
+    func labelCenter(_ i: Int) -> CGPoint {
+        let mid = CGFloat(i) * 2 * .pi / CGFloat(Geometry.sliceNames.count), r = (innerRadius + outerRadius) / 2
+        return CGPoint(x: bounds.midX + r * sin(mid), y: bounds.midY + r * cos(mid))
+    }
+
+    /// Click mode: convert the Finder selection with slice `i`.
+    func pick(_ i: Int) {
+        guard let urls = clickURLs else { return }
+        onDrop?(Geometry.sliceNames[i], urls)
+    }
+
+    // The panel is never key, so the first click must act.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        guard clickURLs != nil else { return }
+        if let i = slice(at: event.locationInWindow) { pick(i) } else { onDismiss?() }
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        if clickURLs != nil { highlight = slice(at: event.locationInWindow) }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if clickURLs != nil { highlight = nil }
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
@@ -82,6 +163,7 @@ final class WheelView: NSView {
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard clickURLs == nil else { return [] }
         highlight = slice(for: sender)
         return highlight != nil && sender.draggingSourceOperationMask.contains(.copy) ? .copy : []
     }
@@ -117,15 +199,34 @@ final class WheelView: NSView {
             NSColor.separatorColor.setStroke()
             wedge.stroke()
 
-            let mid = (CGFloat(i) * width) * .pi / 180, labelRadius = (innerRadius + outerRadius) / 2
             let color: NSColor = i == highlight ? .alternateSelectedControlTextColor : .labelColor
             let label = NSAttributedString(string: name, attributes: [
                 .font: NSFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: color,
             ])
             let size = label.size()
-            label.draw(at: CGPoint(
-                x: center.x + labelRadius * sin(mid) - size.width / 2,
-                y: center.y + labelRadius * cos(mid) - size.height / 2))
+            let labelAt = labelCenter(i)
+            label.draw(at: CGPoint(x: labelAt.x - size.width / 2, y: labelAt.y - size.height / 2))
         }
+    }
+}
+
+/// VoiceOver button for one slice in click mode; pressing it converts like a click.
+private final class SliceElement: NSAccessibilityElement {
+    private let press: @MainActor @Sendable () -> Void
+
+    init(label: String, frame: NSRect, parent: NSView, press: @escaping @MainActor @Sendable () -> Void) {
+        self.press = press
+        super.init()
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(label)
+        setAccessibilityParent(parent)
+        setAccessibilityFrameInParentSpace(frame)
+    }
+
+    // Accessibility actions are delivered on the main thread.
+    override func accessibilityPerformPress() -> Bool {
+        let press = press
+        MainActor.assumeIsolated { press() }
+        return true
     }
 }
