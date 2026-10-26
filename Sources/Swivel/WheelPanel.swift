@@ -14,6 +14,7 @@ final class WheelPanel {
         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
     private let view = WheelView(frame: NSRect(origin: .zero, size: wheelSize))
     private var pendingHide: Timer?
+    private var keyWatch: Timer?
 
     init(onDrop: @escaping (String, [URL]) -> Void) {
         panel.level = .popUpMenu
@@ -43,6 +44,18 @@ final class WheelPanel {
         hide()
         view.clickURLs = urls
         place(at: point)
+        // Finder keeps the keys, so arrows or typing would change its selection under the wheel: hide on any keyDown.
+        let opened = ProcessInfo.processInfo.systemUptime
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                let sinceKey = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown)
+                if TapRule.keyTyped(sinceKeyDown: sinceKey, elapsed: ProcessInfo.processInfo.systemUptime - opened) {
+                    self?.hide()
+                }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        keyWatch = timer
     }
 
     /// Hides a click-mode wheel; returns whether one was up.
@@ -82,6 +95,8 @@ final class WheelPanel {
     func hide() {
         pendingHide?.invalidate()
         pendingHide = nil
+        keyWatch?.invalidate()
+        keyWatch = nil
         view.highlight = nil
         view.clickURLs = nil
         panel.orderOut(nil)

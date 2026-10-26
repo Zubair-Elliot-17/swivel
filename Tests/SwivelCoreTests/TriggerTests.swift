@@ -128,3 +128,9 @@ func tapStatusFromPermission(_ code: Int32, _ line: String) {
 @Test func nothingSelectedLine() {
     #expect(TapStatus.nothingSelected.menuLine == "Shift-tap: nothing selected")
 }
+
+/// Click wheel open for `elapsed` s: a keyDown since then means Finder took the keys, so the wheel hides.
+@Test(arguments: [(0.5, 1.0, true), (1.0, 1.0, false), (1.001, 1.0, false), (0.0, 0.0, false)])
+func keyTypedSinceOpen(_ sinceKeyDown: Double, _ elapsed: Double, _ typed: Bool) {
+    #expect(TapRule.keyTyped(sinceKeyDown: sinceKeyDown, elapsed: elapsed) == typed)
+}

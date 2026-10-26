@@ -48,6 +48,11 @@ public enum TapRule {
         if !finderFrontmost { return "Finder not frontmost" }
         return nil
     }
+
+    /// Whether a key went down within the last `elapsed` seconds (since a tap or the wheel opening).
+    public static func keyTyped(sinceKeyDown: Double, elapsed: Double) -> Bool {
+        sinceKeyDown < elapsed
+    }
 }
 
 /// Finder Automation state behind the "Shift-tap:" menu line.
