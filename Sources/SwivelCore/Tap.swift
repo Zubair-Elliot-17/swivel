@@ -49,6 +49,16 @@ public enum TapRule {
         return nil
     }
 
+    /// After the slow selection read, `elapsed` s after the tap: nil if the wheel may still open, else why not.
+    public static func lateRejection(elapsed: Double, sinceKeyDown: Double, sinceLeftDown: Double, sinceRightDown: Double,
+                                     buttonsDown: Int, finderFrontmost: Bool) -> String? {
+        if keyTyped(sinceKeyDown: sinceKeyDown, elapsed: elapsed) { return "key typed" }
+        if sinceLeftDown < elapsed || sinceRightDown < elapsed { return "mouse clicked" }
+        if buttonsDown != 0 { return "button down" }
+        if !finderFrontmost { return "Finder not frontmost" }
+        return nil
+    }
+
     /// Whether a key went down within the last `elapsed` seconds (since a tap or the wheel opening).
     public static func keyTyped(sinceKeyDown: Double, elapsed: Double) -> Bool {
         sinceKeyDown < elapsed

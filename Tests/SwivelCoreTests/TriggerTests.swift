@@ -134,3 +134,27 @@ func tapStatusFromPermission(_ code: Int32, _ line: String) {
 func keyTypedSinceOpen(_ sinceKeyDown: Double, _ elapsed: Double, _ typed: Bool) {
     #expect(TapRule.keyTyped(sinceKeyDown: sinceKeyDown, elapsed: elapsed) == typed)
 }
+
+/// Inputs to TapRule.lateRejection `elapsed` = 2 s after the tap, all passing; each case moves one field to its boundary.
+struct LateInput: Sendable {
+    var sinceKeyDown = 10.0, sinceLeftDown = 10.0, sinceRightDown = 10.0, buttonsDown = 0, finderFrontmost = true
+}
+
+let lateCases: [(String, LateInput, String?)] = [
+    ("all pass", LateInput(), nil),
+    ("key at tap", LateInput(sinceKeyDown: 2.0), nil),
+    ("key after tap", LateInput(sinceKeyDown: 1.999), "key typed"),
+    ("left down at tap", LateInput(sinceLeftDown: 2.0), nil),
+    ("left down after tap", LateInput(sinceLeftDown: 1.999), "mouse clicked"),
+    ("right down at tap", LateInput(sinceRightDown: 2.0), nil),
+    ("right down after tap", LateInput(sinceRightDown: 1.999), "mouse clicked"),
+    ("button down", LateInput(buttonsDown: 2), "button down"),
+    ("Finder not frontmost", LateInput(finderFrontmost: false), "Finder not frontmost"),
+]
+
+@Test(arguments: lateCases)
+func lateRuleNamesTheFailingRule(_ name: String, _ i: LateInput, _ expected: String?) {
+    #expect(TapRule.lateRejection(elapsed: 2.0, sinceKeyDown: i.sinceKeyDown, sinceLeftDown: i.sinceLeftDown,
+                                  sinceRightDown: i.sinceRightDown, buttonsDown: i.buttonsDown,
+                                  finderFrontmost: i.finderFrontmost) == expected)
+}

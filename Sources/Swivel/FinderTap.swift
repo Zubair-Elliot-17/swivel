@@ -60,19 +60,16 @@ final class FinderTap {
             other: !flags.intersection([.command, .option, .function]).isEmpty, time: event.timestamp)
         else { return }
         if dismissWheel() { return }
-        func since(_ type: CGEventType) -> Double {
-            CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: type)
-        }
         if let rule = TapRule.rejection(
             held: tap.held, sinceKeyDown: since(.keyDown), sinceLeftDown: since(.leftMouseDown),
             sinceRightDown: since(.rightMouseDown), buttonsDown: NSEvent.pressedMouseButtons, dragLive: isDragLive(),
-            finderFrontmost: NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder") {
+            finderFrontmost: Self.finderFrontmost) {
             tapLog.info("tap rejected: \(rule, privacy: .public) (held \(tap.held, format: .fixed(precision: 3)) s)")
             return
         }
         guard !checking else { return tapLog.info("tap ignored: check in flight") }
         checking = true
-        let point = NSEvent.mouseLocation
+        let point = NSEvent.mouseLocation, tapTime = event.timestamp
         Task {
             defer { checking = false }
             let code = await Self.permission(ask: false)
@@ -82,8 +79,24 @@ final class FinderTap {
             }
             guard let urls = readSelection() else { return }
             setStatus(urls.isEmpty ? .nothingSelected : .ready)
-            if !urls.isEmpty { onTap(point, urls) }
+            guard !urls.isEmpty else { return }
+            // The check and read can take ~2 s cold; drop the wheel if the user moved on meanwhile.
+            if let rule = TapRule.lateRejection(
+                elapsed: ProcessInfo.processInfo.systemUptime - tapTime, sinceKeyDown: since(.keyDown),
+                sinceLeftDown: since(.leftMouseDown), sinceRightDown: since(.rightMouseDown),
+                buttonsDown: NSEvent.pressedMouseButtons, finderFrontmost: Self.finderFrontmost) {
+                return tapLog.info("tap dropped: \(rule, privacy: .public) after read")
+            }
+            onTap(point, urls)
         }
+    }
+
+    private static var finderFrontmost: Bool {
+        NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder"
+    }
+
+    private func since(_ type: CGEventType) -> Double {
+        CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: type)
     }
 
     /// Finder's selection as file URLs; nil if the script failed (logged).
