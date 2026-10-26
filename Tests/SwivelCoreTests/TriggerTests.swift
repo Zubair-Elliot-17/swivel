@@ -106,3 +106,17 @@ func tapRuleNamesTheFailingRule(_ name: String, _ i: RuleInput, _ expected: Stri
                                       dragLive: i.dragLive, finderFrontmost: i.finderFrontmost)
     #expect(rejection == expected)
 }
+
+@Test(arguments: [
+    (Int32(0), "Shift-tap: ready"),
+    (-1744, "Shift-tap: allow Finder access"),
+    (-1743, "Shift-tap: denied, see System Settings > Automation"),
+    (-600, "Shift-tap: allow Finder access"),
+])
+func tapStatusFromPermission(_ code: Int32, _ line: String) {
+    #expect(TapStatus(permission: code).menuLine == line)
+}
+
+@Test func nothingSelectedLine() {
+    #expect(TapStatus.nothingSelected.menuLine == "Shift-tap: nothing selected")
+}

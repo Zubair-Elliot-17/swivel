@@ -49,3 +49,26 @@ public enum TapRule {
         return nil
     }
 }
+
+/// Finder Automation state behind the "Shift-tap:" menu line.
+public enum TapStatus: Equatable, Sendable {
+    case ready, needsAccess, denied, nothingSelected
+
+    /// From an AEDeterminePermissionToAutomateTarget result: noErr, -1743 denied, else not yet allowed.
+    public init(permission: Int32) {
+        switch permission {
+        case 0: self = .ready
+        case -1743: self = .denied
+        default: self = .needsAccess
+        }
+    }
+
+    public var menuLine: String {
+        switch self {
+        case .ready: "Shift-tap: ready"
+        case .needsAccess: "Shift-tap: allow Finder access"
+        case .denied: "Shift-tap: denied, see System Settings > Automation"
+        case .nothingSelected: "Shift-tap: nothing selected"
+        }
+    }
+}
