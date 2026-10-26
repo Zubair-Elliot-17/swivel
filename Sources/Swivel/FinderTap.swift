@@ -62,7 +62,8 @@ final class FinderTap {
         if dismissWheel() { return }
         if let rule = TapRule.rejection(
             held: tap.held, sinceKeyDown: since(.keyDown), sinceLeftDown: since(.leftMouseDown),
-            sinceRightDown: since(.rightMouseDown), buttonsDown: NSEvent.pressedMouseButtons, dragLive: isDragLive(),
+            sinceRightDown: since(.rightMouseDown), sinceScroll: since(.scrollWheel),
+            buttonsDown: NSEvent.pressedMouseButtons, dragLive: isDragLive(),
             finderFrontmost: Self.finderFrontmost) {
             tapLog.info("tap rejected: \(rule, privacy: .public) (held \(tap.held, format: .fixed(precision: 3)) s)")
             return

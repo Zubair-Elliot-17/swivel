@@ -39,10 +39,11 @@ public enum TapRule {
 
     /// nil when the tap counts; otherwise the first failing rule, for the log.
     public static func rejection(held: Double, sinceKeyDown: Double, sinceLeftDown: Double, sinceRightDown: Double,
-                                 buttonsDown: Int, dragLive: Bool, finderFrontmost: Bool) -> String? {
+                                 sinceScroll: Double, buttonsDown: Int, dragLive: Bool, finderFrontmost: Bool) -> String? {
         if held > maxHeld { return "held too long" }
         if sinceKeyDown <= held + quietBeforeKey { return "key typed" }
         if sinceLeftDown <= held || sinceRightDown <= held { return "mouse clicked" }
+        if sinceScroll <= held { return "scrolled" }  // Shift/Ctrl + scroll is horizontal scroll or zoom
         if buttonsDown != 0 { return "button down" }
         if dragLive { return "drag live" }
         if !finderFrontmost { return "Finder not frontmost" }

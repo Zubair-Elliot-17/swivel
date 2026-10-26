@@ -87,7 +87,7 @@ func tapDetectorReportsBareTaps(_ c: TapCase) {
 
 /// Inputs to TapRule, all passing; each case changes one field to its boundary.
 struct RuleInput: Sendable {
-    var held = 0.25, sinceKeyDown = 10.0, sinceLeftDown = 10.0, sinceRightDown = 10.0
+    var held = 0.25, sinceKeyDown = 10.0, sinceLeftDown = 10.0, sinceRightDown = 10.0, sinceScroll = 10.0
     var buttonsDown = 0, dragLive = false, finderFrontmost = true
 }
 
@@ -102,6 +102,9 @@ let ruleCases: [(String, RuleInput, String?)] = [
     ("right down just before press", RuleInput(sinceRightDown: 0.251), nil),
     ("right down at press", RuleInput(sinceRightDown: 0.25), "mouse clicked"),
     ("right down during hold", RuleInput(sinceRightDown: 0.1), "mouse clicked"),
+    ("scroll just before press", RuleInput(sinceScroll: 0.251), nil),
+    ("scroll at press", RuleInput(sinceScroll: 0.25), "scrolled"),
+    ("scroll during hold", RuleInput(sinceScroll: 0.1), "scrolled"),
     ("button down", RuleInput(buttonsDown: 1), "button down"),
     ("drag live", RuleInput(dragLive: true), "drag live"),
     ("Finder not frontmost", RuleInput(finderFrontmost: false), "Finder not frontmost"),
@@ -110,8 +113,8 @@ let ruleCases: [(String, RuleInput, String?)] = [
 @Test(arguments: ruleCases)
 func tapRuleNamesTheFailingRule(_ name: String, _ i: RuleInput, _ expected: String?) {
     let rejection = TapRule.rejection(held: i.held, sinceKeyDown: i.sinceKeyDown, sinceLeftDown: i.sinceLeftDown,
-                                      sinceRightDown: i.sinceRightDown, buttonsDown: i.buttonsDown,
-                                      dragLive: i.dragLive, finderFrontmost: i.finderFrontmost)
+                                      sinceRightDown: i.sinceRightDown, sinceScroll: i.sinceScroll,
+                                      buttonsDown: i.buttonsDown, dragLive: i.dragLive, finderFrontmost: i.finderFrontmost)
     #expect(rejection == expected)
 }
 
