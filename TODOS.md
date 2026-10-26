@@ -3,7 +3,7 @@
 P3 hardening from the M1 review (2026-10-24). None blocks M1.
 
 ## Drag and wheel
-- ~~**Re-read drag types per change, not per drag**~~ Done in M2b (poll re-reads types on each changeCount change).
+- ~~**Re-read drag types per change, not per drag**~~ Done in M2b (poll re-reads types every tick once changeCount has moved).
 - ~~**Timers in common run-loop mode**~~ Done in M2b (drag poll and hide timer).
 - **Screen lookup at top/right edge** (`WheelPanel.swift:78`): `CGRect.contains` excludes `maxX/maxY`, so a second display's top row falls back to the main screen. Use `NSMouseInRect`.
 - **Stale highlight after a refused drop** (`WheelPanel.swift` `show(at:)`): a new drag within 0.5 s shows the old highlight until the next drag update. The drop slice is still correct. Set `view.highlight = nil` when repositioning.

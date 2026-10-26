@@ -61,8 +61,9 @@ public enum TapRule {
     }
 
     /// Whether a key went down within the last `elapsed` seconds (since a tap or the wheel opening).
-    public static func keyTyped(sinceKeyDown: Double, elapsed: Double) -> Bool {
-        sinceKeyDown < elapsed
+    /// Under VoiceOver keys drive its cursor, not Finder, so they never count.
+    public static func keyTyped(sinceKeyDown: Double, elapsed: Double, voiceOver: Bool = false) -> Bool {
+        !voiceOver && sinceKeyDown < elapsed
     }
 }
 

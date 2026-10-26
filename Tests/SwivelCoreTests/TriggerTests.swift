@@ -161,3 +161,8 @@ func lateRuleNamesTheFailingRule(_ name: String, _ i: LateInput, _ expected: Str
                                   sinceRightDown: i.sinceRightDown, buttonsDown: i.buttonsDown,
                                   finderFrontmost: i.finderFrontmost) == expected)
 }
+
+/// VoiceOver keys (Ctrl+Opt+arrows) move its cursor onto the slices, so they must not hide the wheel.
+@Test func voiceOverKeysKeepWheel() {
+    #expect(TapRule.keyTyped(sinceKeyDown: 0.5, elapsed: 1.0, voiceOver: true) == false)
+}
