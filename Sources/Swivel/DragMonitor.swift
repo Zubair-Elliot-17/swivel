@@ -9,6 +9,7 @@ let log = Logger(subsystem: "dev.zubair.swivel", category: "drag")
 @MainActor
 final class DragMonitor {
     private let onState: (String) -> Void
+    private let onLive: () -> Void
     private let onTrigger: (NSPoint) -> Void
     private let onEnd: () -> Void
     private let pasteboard = NSPasteboard(name: .drag)
@@ -18,8 +19,10 @@ final class DragMonitor {
     private var trigger = DragTrigger(shift: false, control: false)
     private(set) var isLive = false
 
-    init(onState: @escaping (String) -> Void, onTrigger: @escaping (NSPoint) -> Void, onEnd: @escaping () -> Void) {
+    init(onState: @escaping (String) -> Void, onLive: @escaping () -> Void, onTrigger: @escaping (NSPoint) -> Void,
+         onEnd: @escaping () -> Void) {
         self.onState = onState
+        self.onLive = onLive
         self.onTrigger = onTrigger
         self.onEnd = onEnd
         // Global monitor handlers arrive on the main thread.
@@ -56,6 +59,7 @@ final class DragMonitor {
             if pasteboard.types?.contains(.fileURL) == true {
                 isLive = true
                 setState("file drag seen")
+                onLive()
             }
         }
         let flags = CGEventSource.flagsState(.combinedSessionState)
