@@ -41,3 +41,68 @@ func dragTriggerFires(_ c: DragCase) {
     let fired = c.ticks.enumerated().filter { trigger.tick(shift: $1.0, control: $1.1, live: $1.2) }.map(\.offset)
     #expect(fired == c.fires)
 }
+
+/// flagsChanged samples (shift, control, other, time) and the Taps they should yield.
+struct TapCase: CustomTestStringConvertible, Sendable {
+    let name: String
+    let events: [(Bool, Bool, Bool, Double)]
+    let taps: [Tap]
+    var testDescription: String { name }
+}
+
+let tapCases: [TapCase] = [
+    TapCase(name: "shift tap", events: [(true, false, false, 1.0), (false, false, false, 1.25)], taps: [Tap(held: 0.25)]),
+    TapCase(name: "ctrl tap", events: [(false, true, false, 2.0), (false, false, false, 2.5)], taps: [Tap(held: 0.5)]),
+    TapCase(name: "shift then cmd", events: [(true, false, false, 1), (true, false, true, 1.1), (true, false, false, 1.2),
+                                             (false, false, false, 1.3)], taps: []),
+    TapCase(name: "cmd then shift", events: [(false, false, true, 1), (true, false, true, 1.1), (true, false, false, 1.2),
+                                             (false, false, false, 1.3)], taps: []),
+    TapCase(name: "cmd down, shift down, cmd up, shift up", events: [(false, false, true, 1), (true, false, true, 1.1),
+                                                                     (true, false, false, 1.2), (false, false, false, 1.3)], taps: []),
+    TapCase(name: "shift then ctrl together", events: [(true, false, false, 1), (true, true, false, 1.1), (false, true, false, 1.2),
+                                                       (false, false, false, 1.3)], taps: []),
+    TapCase(name: "option alone", events: [(false, false, true, 1), (false, false, false, 1.2)], taps: []),
+    // Caps Lock toggles send flagsChanged with no trigger or other key change.
+    TapCase(name: "caps lock then shift tap", events: [(false, false, false, 0.5), (true, false, false, 1), (false, false, false, 1.5)],
+            taps: [Tap(held: 0.5)]),
+    TapCase(name: "two taps", events: [(true, false, false, 1), (false, false, false, 1.25), (false, true, false, 2),
+                                       (false, false, false, 2.5)], taps: [Tap(held: 0.25), Tap(held: 0.5)]),
+    TapCase(name: "tainted press does not taint the next", events: [(true, false, true, 1), (false, false, false, 1.2),
+                                                                    (true, false, false, 2), (false, false, false, 2.25)],
+            taps: [Tap(held: 0.25)]),
+]
+
+@Test(arguments: tapCases)
+func tapDetectorReportsBareTaps(_ c: TapCase) {
+    var detector = TapDetector()
+    let taps = c.events.compactMap { detector.update(shift: $0.0, control: $0.1, other: $0.2, time: $0.3) }
+    #expect(taps == c.taps)
+}
+
+/// Inputs to TapRule, all passing; each case changes one field to its boundary.
+struct RuleInput: Sendable {
+    var held = 0.25, sinceKeyDown = 10.0, sinceLeftDown = 10.0, sinceRightDown = 10.0
+    var buttonsDown = 0, dragLive = false, finderFrontmost = true
+}
+
+let ruleCases: [(String, RuleInput, String?)] = [
+    ("all pass", RuleInput(), nil),
+    ("held 0.7", RuleInput(held: 0.7), nil),
+    ("held 0.701", RuleInput(held: 0.701), "held too long"),
+    ("key just inside", RuleInput(sinceKeyDown: 0.751), nil),
+    ("key at held + 0.5", RuleInput(sinceKeyDown: 0.75), "key typed"),
+    ("left down just before press", RuleInput(sinceLeftDown: 0.251), nil),
+    ("left down at press", RuleInput(sinceLeftDown: 0.25), "mouse clicked"),
+    ("right down during hold", RuleInput(sinceRightDown: 0.1), "mouse clicked"),
+    ("button down", RuleInput(buttonsDown: 1), "button down"),
+    ("drag live", RuleInput(dragLive: true), "drag live"),
+    ("Finder not frontmost", RuleInput(finderFrontmost: false), "Finder not frontmost"),
+]
+
+@Test(arguments: ruleCases)
+func tapRuleNamesTheFailingRule(_ name: String, _ i: RuleInput, _ expected: String?) {
+    let rejection = TapRule.rejection(held: i.held, sinceKeyDown: i.sinceKeyDown, sinceLeftDown: i.sinceLeftDown,
+                                      sinceRightDown: i.sinceRightDown, buttonsDown: i.buttonsDown,
+                                      dragLive: i.dragLive, finderFrontmost: i.finderFrontmost)
+    #expect(rejection == expected)
+}
