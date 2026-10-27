@@ -43,20 +43,25 @@ public enum Converter {
 
     /// Converts `urls` with at most `maxInFlight` decodes at once (each holds a full bitmap); keeps input order.
     public static func convertBatch(_ urls: [URL], to target: ImageFormat, maxInFlight: Int = 4) async -> [Outcome] {
+        await window(urls, maxInFlight: maxInFlight) { await convert($0, to: target) }
+    }
+
+    /// Runs `job` per URL with at most `maxInFlight` at once; keeps input order.
+    static func window(_ urls: [URL], maxInFlight: Int, job: @escaping @Sendable (URL) async -> Outcome) async -> [Outcome] {
         await withTaskGroup(of: (Int, Outcome).self) { group in
             var results = [Outcome?](repeating: nil, count: urls.count)
             var next = 0
             // Sliding window: seed the cap, then start one more as each finishes.
             while next < min(max(maxInFlight, 1), urls.count) {
                 let i = next
-                group.addTask { (i, await convert(urls[i], to: target)) }
+                group.addTask { (i, await job(urls[i])) }
                 next += 1
             }
             while let (i, outcome) = await group.next() {
                 results[i] = outcome
                 if next < urls.count {
                     let j = next
-                    group.addTask { (j, await convert(urls[j], to: target)) }
+                    group.addTask { (j, await job(urls[j])) }
                     next += 1
                 }
             }
