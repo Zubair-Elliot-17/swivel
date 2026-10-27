@@ -17,7 +17,7 @@ P3 hardening from the M1 review (2026-10-24). None blocks M1.
 - **Hardened runtime** (`scripts/bundle.sh:25`): `codesign --options runtime`, plus `--timestamp` once signed with a real identity. The Finder tap then needs the `com.apple.security.automation.apple-events` entitlement.
 
 ## Tests
-- **`wheelHasSixSlices` restates its own literal** (`GeometryTests.swift:18-20`): it only fails when the list is edited on purpose. Delete it, or keep it knowingly.
+- **`wheelHasSevenSlices` restates its own literal** (`GeometryTests.swift:21-23`): it only fails when the list is edited on purpose. Delete it, or keep it knowingly.
 
 ## M2 review
 P3s from the M2 review (2026-10-25). None blocks M2.
@@ -28,7 +28,6 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **Whole libwebp compiled, decoder included**: revisit if a WebP decode path is ever added.
 - **Partial output on disk full** (`Converter.swift` claim): write to a temp file, then `renamex_np(RENAME_EXCL)`.
 - **WebP job memory ~300-400 MB per 24 MP**: release the decoded image earlier; rerun QA row 8 with WebP.
-- **Reveal stays on the previous batch after a PDF drop** (`main.swift` drop).
 - **Overlapping batches**: an earlier batch's failure shows only in the log.
 - **Blocking ImageIO work on the Swift cooperative pool** (`Converter.convertBatch`): move to a dedicated queue if it starves other tasks.
 - **Unchecked `width * height`** (`Converter.swift:65`): use `multipliedReportingOverflow`; ImageIO didn't report such sizes in a probe, so not reachable today.
@@ -53,3 +52,10 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **TapStatus menu-line tests restate literals** (`TriggerTests.swift:121-133`): they only fail on a deliberate copy edit; keep knowingly or test the mapping only.
 - **Input methods that switch language on a bare Shift tap** open the wheel too; consider an off switch.
 - ~~**Stale line refs in TODOS**~~ Done in M2b fixes (refs re-pointed to current lines).
+
+## M3 PDF + text
+- **Render 200 MP clamp untested** (`PDFRender.swift` render): a real test needs an ~800 MB bitmap; check by hand with a poster-size PDF.
+- **OCR orientation not proven by a test** (`TextTests.swift` sidewaysPhotoIsReadUpright): Vision reads rotated text even when told `.up`.
+- **Transparent HEIC/WebP stay lossless in a combined PDF** (`PDFMaker.swift`): JPEG would flatten them on black; flatten on white first if file size matters.
+- **Partial pages stay on disk** when a PDF page fails part-way (`PDFRender.swift`): named in the log detail, same policy as the claim shortcut.
+- **PDFKit/Vision work blocks the cooperative pool** like the M2 ImageIO work; a 100-page OCR is ~30 s on one thread.
