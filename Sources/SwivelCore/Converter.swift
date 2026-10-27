@@ -17,19 +17,27 @@ public enum Converter {
         let type = src.flatMap(CGImageSourceGetType).flatMap { UTType($0 as String) }
         let count = src.map(CGImageSourceGetCount) ?? 0
         if let reason = skipReason(sourceType: type, imageCount: count, target: target) {
-            // A file that exists but won't open (no read permission) isn't "not an image"; folders stay .notImage.
-            var isDir: ObjCBool = false
-            let unreadable = reason == .notImage && FileManager.default.fileExists(atPath: source.path, isDirectory: &isDir)
-                && !isDir.boolValue && !FileManager.default.isReadableFile(atPath: source.path)
-            return .skipped(source: source, unreadable ? .unreadable : reason)
+            return skipped(source, reason)
         }
         do {
             let data = try encode(src!, to: target)
             return .converted(source: source, outputs: [try claim(data, source: source, ext: target.fileExtension)])
         } catch {
-            let full = error.localizedDescription, short = menuReason(for: error)
-            return .failed(source: source, reason: short, detail: short == full ? nil : full)
+            return failed(source, error)
         }
+    }
+
+    /// A file that exists but won't open (no read permission) isn't "not an image"; folders stay .notImage.
+    static func skipped(_ source: URL, _ reason: SkipReason) -> Outcome {
+        var isDir: ObjCBool = false
+        let unreadable = reason == .notImage && FileManager.default.fileExists(atPath: source.path, isDirectory: &isDir)
+            && !isDir.boolValue && !FileManager.default.isReadableFile(atPath: source.path)
+        return .skipped(source: source, unreadable ? .unreadable : reason)
+    }
+
+    static func failed(_ source: URL, _ error: Error) -> Outcome {
+        let full = error.localizedDescription, short = menuReason(for: error)
+        return .failed(source: source, reason: short, detail: short == full ? nil : full)
     }
 
     /// Converts `urls` with at most `maxInFlight` decodes at once (each holds a full bitmap); keeps input order.
@@ -57,21 +65,36 @@ public enum Converter {
 
     /// Encodes the primary image in memory, so a name is claimed only once the bytes exist.
     static func encode(_ src: CGImageSource, to target: ImageFormat) throws -> Data {
-        let props = CGImageSourceCopyPropertiesAtIndex(src, CGImageSourceGetPrimaryImageIndex(src), nil) as? [CFString: Any]
+        let (width, height) = try pixelSize(src, at: CGImageSourceGetPrimaryImageIndex(src))
+        if target == .webp { return try encodeWebP(src, side: max(width, height)) }
+        // AddImageFromSource keeps EXIF, orientation and ICC; alpha to JPEG flattens on white.
+        return try writeImageIO(target) { CGImageDestinationAddImageFromSource($0, src, CGImageSourceGetPrimaryImageIndex(src), $1) }
+    }
+
+    /// Encodes an already-decoded image (PDF pages, lossy frames for a combined PDF).
+    static func encode(_ image: CGImage, to target: ImageFormat) throws -> Data {
+        try writeImageIO(target) { CGImageDestinationAddImage($0, image, $1) }
+    }
+
+    private static func writeImageIO(_ target: ImageFormat, add: (CGImageDestination, CFDictionary) -> Void) throws -> Data {
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data as CFMutableData, target.utType.identifier as CFString, 1, nil)
+        else { throw ConvertError("can't write \(target.rawValue)") }
+        let options: [CFString: Any] = target == .jpeg || target == .heic ? [kCGImageDestinationLossyCompressionQuality: 0.85] : [:]
+        add(dest, options as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else { throw ConvertError("couldn't encode \(target.rawValue)") }
+        return data as Data
+    }
+
+    /// Pixel size of frame `index`, refusing unreadable sizes and anything over the 200 MP cap.
+    static func pixelSize(_ src: CGImageSource, at index: Int) throws -> (width: Int, height: Int) {
+        let props = CGImageSourceCopyPropertiesAtIndex(src, index, nil) as? [CFString: Any]
         guard let width = props?[kCGImagePropertyPixelWidth] as? Int, let height = props?[kCGImagePropertyPixelHeight] as? Int,
               width > 0, height > 0
         else { throw ConvertError("couldn't read image") }
         // 200 MP is ~800 MB as RGBA; with 4 in flight that stays a few GB, and it stops small-file bombs.
         guard width * height <= 200_000_000 else { throw ConvertError("too large (max 200 MP)") }
-        if target == .webp { return try encodeWebP(src, side: max(width, height)) }
-        let data = NSMutableData()
-        guard let dest = CGImageDestinationCreateWithData(data as CFMutableData, target.utType.identifier as CFString, 1, nil)
-        else { throw ConvertError("can't write \(target.rawValue)") }
-        // AddImageFromSource keeps EXIF, orientation and ICC; alpha to JPEG flattens on white.
-        let options: [CFString: Any] = target == .jpeg || target == .heic ? [kCGImageDestinationLossyCompressionQuality: 0.85] : [:]
-        CGImageDestinationAddImageFromSource(dest, src, CGImageSourceGetPrimaryImageIndex(src), options as CFDictionary)
-        guard CGImageDestinationFinalize(dest) else { throw ConvertError("couldn't encode \(target.rawValue)") }
-        return data as Data
+        return (width, height)
     }
 
     /// ImageIO can't write WebP: bake orientation into upright straight-alpha sRGB pixels, then libwebp lossy q75.

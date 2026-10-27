@@ -22,13 +22,13 @@ enum Fixture: String, CaseIterable, Sendable {
     var format: ImageFormat { self == .png ? .png : .jpeg }
 }
 
-private func makeScratch() throws -> URL {
+func makeScratch() throws -> URL {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("swivel-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     return dir
 }
 
-private func cleanUp(_ dir: URL) {
+func cleanUp(_ dir: URL) {
     try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path)
     try? FileManager.default.removeItem(at: dir)
 }
@@ -90,7 +90,7 @@ struct ReadBack {
     }
 }
 
-private func files(in dir: URL) throws -> Set<String> {
+func files(in dir: URL) throws -> Set<String> {
     Set(try FileManager.default.contentsOfDirectory(atPath: dir.path))
 }
 
@@ -244,7 +244,7 @@ func webPOutputIsWebP(fixture: Fixture) async throws {
 
 /// A 1-bit grey PNG of side x side zero pixels, built by hand: a 225 MP bomb is ~27 KB on disk.
 /// With `fakeBody` the IDAT is empty, so ImageIO can't report the dimensions.
-private func writeFlatPNG(side: Int, in dir: URL, fakeBody: Bool = false) throws -> URL {
+func writeFlatPNG(side: Int, in dir: URL, fakeBody: Bool = false) throws -> URL {
     func be(_ v: Int) -> [UInt8] { [24, 16, 8, 0].map { UInt8(truncatingIfNeeded: v >> $0) } }
     func chunk(_ type: String, _ body: [UInt8]) -> [UInt8] {
         let typed = Array(type.utf8) + body
