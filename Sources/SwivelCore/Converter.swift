@@ -3,6 +3,9 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 import libwebp
+import os
+
+let convertLog = Logger(subsystem: "dev.zubair.swivel", category: "convert")
 
 struct ConvertError: LocalizedError {
     let errorDescription: String?

@@ -2,7 +2,6 @@ import CoreGraphics
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
-import os
 
 /// Page size and CTM that draw a `width` x `height` image (in `(0,0,w,h)`) upright for EXIF `orientation` 1-8.
 /// Rotating the drawing, not the pixels, keeps JPEG bytes passed through.
@@ -20,8 +19,6 @@ public func orientedPage(orientation: Int, width: Int, height: Int) -> (size: CG
     default: return (upright, .identity)
     }
 }
-
-let log = Logger(subsystem: "dev.zubair.swivel", category: "convert")
 
 /// Log note for pages dropped by a cap, e.g. "1 page skipped (max 100)" or "2 pages skipped (max 2000 MP)".
 func pagesSkipped(_ count: Int, max: Int, unit: String = "") -> String {
@@ -63,7 +60,7 @@ extension Converter {
             do {
                 // Only frames that fit are checked, so a bad frame past the cap can't fail the source.
                 for i in 0..<min(count, max(room, 0)) { _ = try pixelSize(src, at: i) }
-                if count > room { log.info("\(url.lastPathComponent, privacy: .public): \(pagesSkipped(count - max(room, 0), max: maxPages), privacy: .public)") }
+                if count > room { convertLog.info("\(url.lastPathComponent, privacy: .public): \(pagesSkipped(count - max(room, 0), max: maxPages), privacy: .public)") }
                 guard room > 0 else {
                     outcomes.append(.skipped(source: url, .pageLimit))
                     continue
@@ -90,7 +87,7 @@ extension Converter {
             } catch where drawn > 0 {
                 // Like a source cut by the page cap: its drawn pages are in the PDF, so it counts as converted.
                 let missing = min(count, room) - drawn
-                log.info("\(url.lastPathComponent, privacy: .public): \(missing) page\(missing == 1 ? "" : "s") not read (\(error.localizedDescription, privacy: .public))")
+                convertLog.info("\(url.lastPathComponent, privacy: .public): \(missing) page\(missing == 1 ? "" : "s") not read (\(error.localizedDescription, privacy: .public))")
                 outcomes.append(nil)
             } catch {
                 outcomes.append(failed(url, error))
