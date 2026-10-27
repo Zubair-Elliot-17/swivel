@@ -59,3 +59,15 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **Transparent HEIC/WebP stay lossless in a combined PDF** (`PDFMaker.swift`): JPEG would flatten them on black; flatten on white first if file size matters.
 - **Partial pages stay on disk** when a PDF page fails part-way (`PDFRender.swift`): named in the log detail, same policy as the claim shortcut.
 - **PDFKit/Vision work blocks the cooperative pool** like the M2 ImageIO work; a 100-page OCR is ~30 s on one thread.
+
+## M3 review
+- **Page-number padding uses the total page count** (`PDFRender.swift` renderPDF): a 150-page PDF gives "page 001"; pad to min(count, 100) instead.
+- **Tiny text layers block OCR**: a scanned page with a stamp or Bates number has a text layer, so it is never OCR'd.
+- **Q1 JPEG re-encode keyed on alphaInfo** (`PDFMaker.swift` hasAlpha): unverified on real iPhone HEIC; check for DCTDecode in QA M3-1, else use kCGImagePropertyHasAlpha.
+- **200 MP page-render/OCR clamp is high for memory** (`PDFRender.swift` renderSize): ~800 MB a page with 4 in flight; consider 50 MP.
+- **M3 file names logged `.public`** (PDFMaker/PDFRender/TextExtract/main.swift), and failure details carry paths: switch to `.private`.
+- **Copy-restricted PDFs still give text** (allowsCopying false): deliberate, the user owns the file.
+- **No cancel for slow PDFs**: a 100-page OCR runs to the end.
+- **isPDF uses the file extension**: a real PDF without .pdf is skipped, a fake .pdf fails.
+- **OCR orientation (M25) and `.accurate` (M26) are unpinned by tests.**
+- **Partly drawn source path untested** (`PDFMaker.swift` catch where drawn > 0): no fixture makes ImageIO size a frame but fail to decode it; needs a decode seam.
