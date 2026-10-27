@@ -7,7 +7,7 @@ APP=build/Swivel.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$(swift build -c release --show-bin-path)/Swivel" "$APP/Contents/MacOS/Swivel"
-cat > "$APP/Contents/Info.plist" <<PLIST
+cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -18,6 +18,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>LSUIElement</key><true/>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>NSAppleEventsUsageDescription</key><string>Swivel reads the files you've selected in Finder so it can convert them.</string>
 </dict>
 </plist>
 PLIST

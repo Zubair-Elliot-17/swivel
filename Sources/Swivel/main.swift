@@ -7,7 +7,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let dragLine = NSMenuItem(title: "Drag: idle", action: nil, keyEquivalent: "")
     private let lastDropLine = NSMenuItem(title: "Last: none", action: nil, keyEquivalent: "")
     private let revealItem = NSMenuItem(title: "Reveal in Finder", action: #selector(reveal), keyEquivalent: "")
+    private let tapLine = NSMenuItem(title: TapStatus.needsAccess.menuLine, action: nil, keyEquivalent: "")
+    private let enableTapItem = NSMenuItem(title: "Enable Shift-tap in Finder…", action: #selector(enableTap), keyEquivalent: "")
     private var dragMonitor: DragMonitor?
+    private var finderTap: FinderTap?
     private var revealTargets: [URL] = []
     private var busy = 0  // batches in flight; overlapping drops keep the icon busy until all finish
 
@@ -23,15 +26,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         revealItem.isEnabled = false
         menu.addItem(revealItem)
         menu.addItem(.separator())
+        menu.addItem(tapLine)
+        enableTapItem.target = self
+        menu.addItem(enableTapItem)
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Swivel", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
 
         let wheel = WheelPanel { [weak self] name, urls in self?.drop(name, urls) }
-        dragMonitor = DragMonitor(
+        let dragMonitor = DragMonitor(
             onState: { [dragLine] in dragLine.title = "Drag: \($0)" },
+            onLive: { _ = wheel.hideClickMode() },
             onTrigger: { wheel.show(at: $0) },
             onEnd: { wheel.dragEnded() }
         )
+        self.dragMonitor = dragMonitor
+
+        // Tap path: the click wheel converts through the same drop(_:_:) as a drag.
+        let finderTap = FinderTap()
+        finderTap.isDragLive = { dragMonitor.isLive }
+        finderTap.dismissWheel = { wheel.hideClickMode() }
+        finderTap.onTap = { wheel.showForClick(at: $0, urls: $1) }
+        finderTap.onStatus = { [tapLine, enableTapItem] status in
+            tapLine.title = status.menuLine
+            // nothingSelected means access is granted, so there is nothing to enable.
+            enableTapItem.isEnabled = status == .needsAccess || status == .denied
+        }
+        finderTap.refresh()
+        self.finderTap = finderTap
+    }
+
+    @objc private func enableTap() {
+        finderTap?.enable()
     }
 
     private func drop(_ name: String, _ urls: [URL]) {
