@@ -45,13 +45,18 @@ extension Converter {
 
     struct OpenFailure: Error { let outcome: Outcome }
 
-    /// The page's crop box at `dpi` (clamped to 200 MP), honouring /Rotate, on opaque white sRGB.
+    /// The page's crop box at `dpi` (clamped to 200 MP and 65,535 px a side), honouring /Rotate, on opaque white sRGB.
     static func render(_ page: PDFPage, dpi: CGFloat) throws -> CGImage {
         var box = page.bounds(for: .cropBox).size
         if page.rotation % 180 != 0 { box = CGSize(width: box.height, height: box.width) }
-        let scale = min(dpi / 72, (200_000_000 / (box.width * box.height)).squareRoot())
-        let w = Int((box.width * scale).rounded()), h = Int((box.height * scale).rounded())
-        guard w > 0, h > 0, let ctx = CGContext(
+        // Sizes stay Double until in range: a crafted box (e.g. 1e20 x 1e-11 pt) would trap Int().
+        let bw = Double(box.width), bh = Double(box.height)
+        guard bw.isFinite, bh.isFinite, bw >= 1, bh >= 1 else { throw ConvertError("couldn't read PDF") }
+        let scale = min(Double(dpi) / 72, (200_000_000 / (bw * bh)).squareRoot(), 65_535 / bw, 65_535 / bh)
+        let wd = (bw * scale).rounded(), hd = (bh * scale).rounded()
+        guard wd >= 1, hd >= 1, wd <= 65_535, hd <= 65_535 else { throw ConvertError("couldn't read PDF") }
+        let w = Int(wd), h = Int(hd)
+        guard let ctx = CGContext(
             data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
         else { throw ConvertError("couldn't read PDF") }
