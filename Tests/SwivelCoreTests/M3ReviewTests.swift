@@ -153,3 +153,51 @@ private func megapixelPages(in dir: URL, name: String) throws -> URL {
     #expect(await Converter.makePDF([source]) == [.failed(source: source, reason: "no free file name")])
     #expect(try files(in: dir) == before)
 }
+
+// MARK: F5 pre-scan stops at the page cap
+
+/// A 2-frame TIFF whose second frame ImageIO counts but can't size: its BitsPerSample entry points at garbage.
+private func tiffWithBrokenSecondFrame(in dir: URL, name: String) throws -> URL {
+    let url = try writeTIFF(frames: 2, in: dir, name: name)
+    var b = [UInt8](try Data(contentsOf: url))
+    let big = b[0] == 0x4D  // "MM"
+    func u16(_ o: Int) -> Int { big ? Int(b[o]) << 8 | Int(b[o + 1]) : Int(b[o + 1]) << 8 | Int(b[o]) }
+    func u32(_ o: Int) -> Int { big ? u16(o) << 16 | u16(o + 2) : u16(o + 2) << 16 | u16(o) }
+    let ifd0 = u32(4), ifd1 = u32(ifd0 + 2 + u16(ifd0) * 12)
+    let entry = try #require((0..<u16(ifd1)).map { ifd1 + 2 + $0 * 12 }.first { u16($0) == 258 })
+    (b[entry + 8], b[entry + 9]) = big ? (0, 3) : (3, 0)
+    try Data(b).write(to: url)
+    let src = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+    let props = CGImageSourceCopyPropertiesAtIndex(src, 1, nil) as? [CFString: Any]
+    #expect(CGImageSourceGetCount(src) == 2 && props?[kCGImagePropertyPixelWidth] == nil)
+    return url
+}
+
+@Test func badFramePastThePageCapDoesNotFailTheSource() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let tag = "prescan\(UUID().uuidString.prefix(8))"
+    let source = try tiffWithBrokenSecondFrame(in: dir, name: tag)
+    let out = dir.appendingPathComponent("\(tag).pdf")
+    #expect(await Converter.makePDF([source], maxPages: 1) == [.converted(source: source, outputs: [out])])
+    #expect(try PDFReadBack(out).pageSizes == [CGSize(width: 16, height: 8)])
+    #expect(try loggedLines(containing: "\(tag).tiff: 1 page skipped (max 1)").count == 1)
+}
+
+@Test func sourceWithNoRoomIsSkippedWithoutReadingFrames() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let a = try write(.png, in: dir, name: "a"), broken = try tiffWithBrokenSecondFrame(in: dir, name: "broken")
+    let out = dir.appendingPathComponent("a.pdf")
+    #expect(await Converter.makePDF([a, broken], maxPages: 1) == [
+        .converted(source: a, outputs: [out]), .skipped(source: broken, .pageLimit),
+    ])
+}
+
+@Test func badFrameInsideThePageCapStillFailsTheSource() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try tiffWithBrokenSecondFrame(in: dir, name: "inside")
+    #expect(await Converter.makePDF([source]) == [.failed(source: source, reason: "couldn't read image")])
+    #expect(try files(in: dir) == ["inside.tiff"])
+}

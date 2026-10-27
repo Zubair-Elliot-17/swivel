@@ -61,7 +61,8 @@ extension Converter {
             let count = CGImageSourceGetCount(src), room = maxPages - pages
             var drawn = 0
             do {
-                for i in 0..<count { _ = try pixelSize(src, at: i) }
+                // Only frames that fit are checked, so a bad frame past the cap can't fail the source.
+                for i in 0..<min(count, max(room, 0)) { _ = try pixelSize(src, at: i) }
                 if count > room { log.info("\(url.lastPathComponent, privacy: .public): \(pagesSkipped(count - max(room, 0), max: maxPages), privacy: .public)") }
                 guard room > 0 else {
                     outcomes.append(.skipped(source: url, .pageLimit))
