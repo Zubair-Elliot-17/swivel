@@ -117,3 +117,39 @@ private func megapixelPages(in dir: URL, name: String) throws -> URL {
     #expect(await Converter.extractText(source, maxPixels: 2_000_000) == .skipped(source: source, .noText))
     #expect(try loggedLines(containing: "\(tag).pdf: 1 page skipped (max 2 MP)").count == 1)
 }
+
+// MARK: F3 combined PDF streams to a temp file
+
+@Test func combinedPDFLeavesNoTempFileBehind() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let a = try write(.png, in: dir, name: "a"), b = try write(.jpeg, in: dir, name: "b")
+    try Data("old".utf8).write(to: dir.appendingPathComponent("a.pdf"))
+    let out = dir.appendingPathComponent("a 2.pdf")
+    #expect(await Converter.makePDF([a, b]) == [.converted(source: a, outputs: [out]), .converted(source: b, outputs: [out])])
+    #expect(try PDFReadBack(out).pageSizes == [CGSize(width: 16, height: 8), CGSize(width: 20, height: 40)])
+    #expect(try files(in: dir) == ["a.png", "b.jpg", "a.pdf", "a 2.pdf"])
+}
+
+@Test func combinedPDFLandsNextToTheFirstSourceAcrossFolders() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let x = dir.appendingPathComponent("x"), y = dir.appendingPathComponent("y")
+    for folder in [x, y] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false) }
+    let a = try write(.png, in: x, name: "a"), b = try write(.png, in: y, name: "b")
+    let out = x.appendingPathComponent("a.pdf")
+    #expect(await Converter.makePDF([a, b]) == [.converted(source: a, outputs: [out]), .converted(source: b, outputs: [out])])
+    #expect(try files(in: x) == ["a.png", "a.pdf"] && files(in: y) == ["b.png"])
+}
+
+@Test func noFreeNameFailsAndRemovesTheTempFile() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try write(.png, in: dir, name: "a")
+    for attempt in 1...9999 {
+        FileManager.default.createFile(atPath: OutputName.candidate(for: source, ext: "pdf", attempt: attempt).path, contents: nil)
+    }
+    let before = try files(in: dir)
+    #expect(await Converter.makePDF([source]) == [.failed(source: source, reason: "no free file name")])
+    #expect(try files(in: dir) == before)
+}

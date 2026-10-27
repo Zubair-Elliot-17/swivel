@@ -32,9 +32,19 @@ extension Converter {
     /// Draws every frame of the image sources, in drop order, into one PDF named after the first converted one.
     /// One job: frames are decoded one at a time, so only one bitmap is alive.
     public static func makePDF(_ urls: [URL], maxPages: Int = 500) async -> [Outcome] {
-        let data = NSMutableData()
-        guard let consumer = CGDataConsumer(data: data as CFMutableData), let ctx = CGContext(consumer: consumer, mediaBox: nil, nil)
-        else { return urls.map { .failed(source: $0, reason: "couldn't write PDF") } }
+        // Streams to a hidden temp file next to the first source that gives a page, so the PDF never sits in memory.
+        var ctx: CGContext?, temp: URL?
+        defer { if let temp { try? FileManager.default.removeItem(at: temp) } }
+        func context(near url: URL) throws -> CGContext {
+            if let ctx { return ctx }
+            let file = url.deletingLastPathComponent().appendingPathComponent(".swivel-\(UUID().uuidString).pdf")
+            // Creating it first surfaces the write error (no permission, read-only) that CGContext would hide.
+            try Data().write(to: file, options: .withoutOverwriting)
+            temp = file
+            guard let made = CGContext(file as CFURL, mediaBox: nil, nil) else { throw ConvertError("couldn't write PDF") }
+            ctx = made
+            return made
+        }
         // nil marks a source that gave pages; it becomes .converted once the PDF is claimed.
         var outcomes: [Outcome?] = [], pages = 0
         for url in urls {
@@ -65,6 +75,7 @@ extension Converter {
                     let page = orientedPage(
                         orientation: props?[kCGImagePropertyOrientation] as? Int ?? 1, width: image.width, height: image.height)
                     var box = CGRect(origin: .zero, size: page.size)
+                    let ctx = try context(near: url)
                     // Each page gets its own media box; nil would reuse the context's default.
                     ctx.beginPDFPage([kCGPDFContextMediaBox: Data(bytes: &box, count: MemoryLayout<CGRect>.size)] as CFDictionary)
                     ctx.concatenate(page.transform)
@@ -77,10 +88,13 @@ extension Converter {
                 outcomes.append(failed(url, error))
             }
         }
-        ctx.closePDF()
-        guard let first = outcomes.firstIndex(where: { $0 == nil }) else { return outcomes.map { $0! } }
+        ctx?.closePDF()
+        ctx = nil  // releasing the context flushes the file
+        guard let temp, let first = outcomes.firstIndex(where: { $0 == nil }) else { return outcomes.map { $0! } }
         do {
-            let output = try claim(data as Data, source: urls[first], ext: "pdf")
+            // CGDataConsumer drops write errors (disk full), so check the file before naming it.
+            guard CGPDFDocument(temp as CFURL)?.numberOfPages == pages else { throw ConvertError("couldn't write PDF") }
+            let output = try claim(file: temp, source: urls[first], ext: "pdf")
             return zip(urls, outcomes).map { $1 ?? .converted(source: $0, outputs: [output]) }
         } catch {
             return zip(urls, outcomes).map { $1 ?? failed($0, error) }

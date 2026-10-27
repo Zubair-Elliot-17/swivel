@@ -156,4 +156,16 @@ public enum Converter {
         }
         throw ConvertError("no free file name")
     }
+
+    /// Gives the finished file `temp` the first free "Keep Both" name, never overwriting.
+    static func claim(file temp: URL, source: URL, ext: String) throws -> URL {
+        // An empty placeholder claims the name atomically on any volume (link/RENAME_EXCL fail on exFAT), then `temp` replaces it.
+        let url = try claim(Data(), source: source, ext: ext)
+        guard rename(temp.path, url.path) == 0 else {
+            let code = errno
+            try? FileManager.default.removeItem(at: url)
+            throw POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)
+        }
+        return url
+    }
 }
