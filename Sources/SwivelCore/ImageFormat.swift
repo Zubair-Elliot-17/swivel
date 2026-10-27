@@ -1,7 +1,7 @@
 import Foundation
 import UniformTypeIdentifiers
 
-/// Image targets on the wheel; raw values are the slice names, so "PDF" maps to nil.
+/// Image targets on the wheel; raw values are the slice names, so "PDF" and "Text" map to nil.
 public enum ImageFormat: String, CaseIterable, Sendable {
     case png = "PNG", jpeg = "JPEG", heic = "HEIC", webp = "WebP", tiff = "TIFF"
 

@@ -113,9 +113,9 @@ final class WheelView: NSView {
         didSet { setAccessibilityChildren(clickURLs == nil ? nil : sliceElements) }
     }
     private lazy var sliceElements: [NSAccessibilityElement] = Geometry.sliceNames.indices.map { i in
-        let c = labelCenter(i)
+        let c = labelCenter(i), name = Geometry.sliceNames[i]
         return SliceElement(
-            label: "Convert to \(Geometry.sliceNames[i])", frame: NSRect(x: c.x - 22, y: c.y - 12, width: 44, height: 24),
+            label: name == "Text" ? "Extract text" : "Convert to \(name)", frame: NSRect(x: c.x - 22, y: c.y - 12, width: 44, height: 24),
             parent: self, press: { [weak self] in self?.pick(i) })
     }
     var highlight: Int? {
