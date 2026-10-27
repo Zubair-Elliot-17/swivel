@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import ImageIO
 import OSLog
+import PDFKit
 import Testing
 import UniformTypeIdentifiers
 import SwivelCore
@@ -279,4 +280,162 @@ func transparentLossySourceIsNotBlackened(format: ImageFormat) async throws {
     _ = await Converter.makePDF([source])
     let px = try PDFReadBack(dir.appendingPathComponent("src.pdf")).pixel(page: 1, 2, 4)
     #expect(px[3] < 10 || px[0] > 240, "transparent area drew as \(px)")
+}
+
+// MARK: PDF -> images
+
+private func names(_ outcome: Outcome) -> [String] {
+    guard case .converted(_, let outputs) = outcome else { return [] }
+    return outputs.map(\.lastPathComponent)
+}
+
+@Test(arguments: ImageFormat.allCases)
+func pdfPagesBecomeImagesAt150DPI(target: ImageFormat) async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try writePDF(in: dir, pages: 3)
+    let outcome = await Converter.convert(source, to: target)
+    let ext = target.fileExtension
+    #expect(names(outcome) == ["doc page 1.\(ext)", "doc page 2.\(ext)", "doc page 3.\(ext)"])
+    for name in names(outcome) {
+        let out = try ReadBack(dir.appendingPathComponent(name))
+        #expect(out.type == target.utType.identifier)
+        #expect((out.width, out.height) == (150, 300))
+        let px = out.pixel(75, 150)
+        #expect(px[3] == 255 && px[0] > 245 && px[1] > 245 && px[2] > 245, "blank page should be opaque white, got \(px)")
+    }
+}
+
+@Test func pngPageHasNoAlphaChannel() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    _ = await Converter.convert(try writePDF(in: dir), to: .png)
+    let src = try #require(CGImageSourceCreateWithURL(dir.appendingPathComponent("doc.png") as CFURL, nil))
+    let props = try #require(CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any])
+    #expect(props[kCGImagePropertyHasAlpha] as? Bool != true)
+}
+
+@Test func pageContentIsDrawn() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try writePDF(in: dir) { ctx, _ in
+        ctx.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
+        ctx.fill(CGRect(x: 0, y: 72, width: 72, height: 72))  // top half
+    }
+    _ = await Converter.convert(source, to: .png)
+    let out = try ReadBack(dir.appendingPathComponent("doc.png"))
+    let top = out.pixel(75, 50), bottom = out.pixel(75, 250)
+    #expect(top[0] > 245 && top[1] < 10, "top \(top)")
+    #expect(bottom[0] > 245 && bottom[1] > 245, "bottom \(bottom)")
+}
+
+@Test func singlePagePDFHasNoPageSuffix() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    #expect(names(await Converter.convert(try writePDF(in: dir), to: .jpeg)) == ["doc.jpg"])
+}
+
+@Test func pageNumbersArePaddedToThePageCount() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let got = names(await Converter.convert(try writePDF(in: dir, pages: 12), to: .png))
+    #expect(got == (1...12).map { String(format: "doc page %02d.png", $0) })
+}
+
+@Test func takenPageNameKeepsBoth() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let existing = dir.appendingPathComponent("doc page 1.png")
+    try Data("old".utf8).write(to: existing)
+    #expect(names(await Converter.convert(try writePDF(in: dir, pages: 2), to: .png)) == ["doc page 1 2.png", "doc page 2.png"])
+    #expect(try Data(contentsOf: existing) == Data("old".utf8))
+}
+
+@Test func pagesPastOneHundredAreSkippedAndLogged() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let tag = "long\(UUID().uuidString.prefix(8))"
+    let source = try writePDF(in: dir, name: tag, pages: 101, size: CGSize(width: 10, height: 10))
+    let got = names(await Converter.convert(source, to: .png))
+    #expect(got.count == 100 && got.first == "\(tag) page 001.png" && got.last == "\(tag) page 100.png")
+    #expect(try files(in: dir).count == 101)
+    #expect(try loggedLines(containing: "\(tag).pdf: 1 page skipped (max 100)").count == 1)
+}
+
+@Test func rotatedPageIsRenderedUpright() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let flat = try writePDF(in: dir, name: "flat")
+    let doc = try #require(PDFDocument(url: flat))
+    doc.page(at: 0)?.rotation = 90
+    let source = dir.appendingPathComponent("turned.pdf")
+    #expect(doc.write(to: source))
+    _ = await Converter.convert(source, to: .png)
+    let out = try ReadBack(dir.appendingPathComponent("turned.png"))
+    #expect((out.width, out.height) == (300, 150))
+}
+
+// MARK: PDF security and failures
+
+private var userPassword: [CFString: Any] { [kCGPDFContextUserPassword: "pw", kCGPDFContextOwnerPassword: "own"] }
+
+@Test(arguments: [ImageFormat.png, .jpeg, .heic, .webp, .tiff])
+func lockedPDFIsSkipped(target: ImageFormat) async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try writePDF(in: dir, pages: 2, options: userPassword)
+    #expect(await Converter.convert(source, to: target) == .skipped(source: source, .locked))
+    #expect(try files(in: dir) == ["doc.pdf"])
+}
+
+@Test func ownerPasswordOnlyPDFConverts() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try writePDF(in: dir, options: [kCGPDFContextOwnerPassword: "own", kCGPDFContextAllowsCopying: false])
+    #expect(names(await Converter.convert(source, to: .png)) == ["doc.png"])
+}
+
+@Test func brokenPDFFails() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = dir.appendingPathComponent("broken.pdf")
+    try Data("%PDF-1.4 not really".utf8).write(to: source)
+    #expect(await Converter.convert(source, to: .png) == .failed(source: source, reason: "couldn't read PDF"))
+    #expect(try files(in: dir) == ["broken.pdf"])
+}
+
+@Test func unreadablePDFIsSkippedAsUnreadable() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try writePDF(in: dir)
+    try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: source.path)
+    #expect(await Converter.convert(source, to: .png) == .skipped(source: source, .unreadable))
+}
+
+// Page 2 is too wide for WebP; page 1 is already on disk and must be named for the log.
+@Test func failureAfterSomePagesNamesThemInTheDetail() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let url = dir.appendingPathComponent("doc.pdf")
+    let ctx = try #require(CGContext(url as CFURL, mediaBox: nil, nil))
+    for size in [CGSize(width: 72, height: 144), CGSize(width: 7900, height: 10)] {
+        var box = CGRect(origin: .zero, size: size)
+        ctx.beginPDFPage([kCGPDFContextMediaBox: Data(bytes: &box, count: MemoryLayout<CGRect>.size)] as CFDictionary)
+        ctx.endPDFPage()
+    }
+    ctx.closePDF()
+
+    let outcome = await Converter.convert(url, to: .webp)
+    guard case .failed(url, let reason, let detail) = outcome else { Issue.record("got \(outcome)"); return }
+    #expect(reason == "too large for WebP (max 16383 px)")
+    #expect(detail?.contains("doc page 1.webp") == true, "detail: \(detail ?? "nil")")
+    #expect(try files(in: dir) == ["doc.pdf", "doc page 1.webp"])
+}
+
+@Test func batchMixesPDFsAndImages() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let pdf = try writePDF(in: dir, pages: 2), png = try write(.png, in: dir)
+    let outcomes = await Converter.convertBatch([pdf, png], to: .jpeg)
+    #expect(outcomes.map(names) == [["doc page 1.jpg", "doc page 2.jpg"], ["photo.jpg"]])
 }

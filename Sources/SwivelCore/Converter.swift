@@ -13,6 +13,7 @@ struct ConvertError: LocalizedError {
 public enum Converter {
     /// Never throws: skips and errors come back as an `Outcome`.
     public static func convert(_ source: URL, to target: ImageFormat) async -> Outcome {
+        if isPDF(source) { return renderPDF(source, to: target) }
         let src = CGImageSourceCreateWithURL(source as CFURL, nil)
         let type = src.flatMap(CGImageSourceGetType).flatMap { UTType($0 as String) }
         let count = src.map(CGImageSourceGetCount) ?? 0
@@ -73,7 +74,8 @@ public enum Converter {
 
     /// Encodes an already-decoded image (PDF pages, lossy frames for a combined PDF).
     static func encode(_ image: CGImage, to target: ImageFormat) throws -> Data {
-        try writeImageIO(target) { CGImageDestinationAddImage($0, image, $1) }
+        if target == .webp { return try encodeWebP(image) }
+        return try writeImageIO(target) { CGImageDestinationAddImage($0, image, $1) }
     }
 
     private static func writeImageIO(_ target: ImageFormat, add: (CGImageDestination, CFDictionary) -> Void) throws -> Data {
@@ -100,14 +102,22 @@ public enum Converter {
     /// ImageIO can't write WebP: bake orientation into upright straight-alpha sRGB pixels, then libwebp lossy q75.
     static func encodeWebP(_ src: CGImageSource, side: Int) throws -> Data {
         let index = CGImageSourceGetPrimaryImageIndex(src)
-        guard side <= Int(WEBP_MAX_DIMENSION) else { throw ConvertError("too large for WebP (max \(WEBP_MAX_DIMENSION) px)") }
+        guard side <= Int(WEBP_MAX_DIMENSION) else { throw webPTooLarge }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceThumbnailMaxPixelSize: side,
         ]
-        guard let image = CGImageSourceCreateThumbnailAtIndex(src, index, options as CFDictionary),
-              let format = vImage_CGImageFormat(
+        guard let image = CGImageSourceCreateThumbnailAtIndex(src, index, options as CFDictionary)
+        else { throw ConvertError("couldn't read image") }
+        return try encodeWebP(image)
+    }
+
+    private static let webPTooLarge = ConvertError("too large for WebP (max \(WEBP_MAX_DIMENSION) px)")
+
+    static func encodeWebP(_ image: CGImage) throws -> Data {
+        guard max(image.width, image.height) <= Int(WEBP_MAX_DIMENSION) else { throw webPTooLarge }
+        guard let format = vImage_CGImageFormat(
                   bitsPerComponent: 8, bitsPerPixel: 32, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
                   bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue))
         else { throw ConvertError("couldn't read image") }
