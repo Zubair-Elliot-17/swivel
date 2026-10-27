@@ -87,7 +87,12 @@ public enum Converter {
         let data = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(data as CFMutableData, target.utType.identifier as CFString, 1, nil)
         else { throw ConvertError("can't write \(target.rawValue)") }
-        let options: [CFString: Any] = target == .jpeg || target == .heic ? [kCGImageDestinationLossyCompressionQuality: 0.85] : [:]
+        let options: [CFString: Any] = switch target {
+        case .jpeg, .heic: [kCGImageDestinationLossyCompressionQuality: 0.85]
+        // LZW (5): uncompressed, a blank 2000 px page is 12 MB.
+        case .tiff: [kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFCompression: 5]]
+        default: [:]
+        }
         add(dest, options as CFDictionary)
         guard CGImageDestinationFinalize(dest) else { throw ConvertError("couldn't encode \(target.rawValue)") }
         return data as Data

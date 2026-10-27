@@ -23,9 +23,9 @@ public func orientedPage(orientation: Int, width: Int, height: Int) -> (size: CG
 
 let log = Logger(subsystem: "dev.zubair.swivel", category: "convert")
 
-/// Log note for pages dropped by a page cap, e.g. "1 page skipped (max 100)".
-func pagesSkipped(_ count: Int, max: Int) -> String {
-    "\(count) page\(count == 1 ? "" : "s") skipped (max \(max))"
+/// Log note for pages dropped by a cap, e.g. "1 page skipped (max 100)" or "2 pages skipped (max 2000 MP)".
+func pagesSkipped(_ count: Int, max: Int, unit: String = "") -> String {
+    "\(count) page\(count == 1 ? "" : "s") skipped (max \(max)\(unit))"
 }
 
 extension Converter {

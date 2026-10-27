@@ -6,8 +6,9 @@ import UniformTypeIdentifiers
 import Vision
 
 extension Converter {
-    /// `<stem>.txt` from an image (OCR of the primary frame) or a PDF (text layer per page, else OCR at 300 dpi).
-    public static func extractText(_ source: URL, maxPages: Int = 100) async -> Outcome {
+    /// `<stem>.txt` from an image (OCR of the primary frame) or a PDF (text layer per page, else OCR at 300 dpi
+    /// within `maxPixels` rendered in all).
+    public static func extractText(_ source: URL, maxPages: Int = 100, maxPixels: Int = pixelBudget) async -> Outcome {
         let text: String
         do {
             if isPDF(source) {
@@ -19,11 +20,17 @@ extension Converter {
                 if doc.pageCount > maxPages {
                     log.info("\(source.lastPathComponent, privacy: .public): \(pagesSkipped(doc.pageCount - maxPages, max: maxPages), privacy: .public)")
                 }
-                var pages: [String] = []
+                var pages: [String] = [], spent = 0
                 for i in 0..<min(doc.pageCount, maxPages) {
                     guard let page = doc.page(at: i) else { throw ConvertError("couldn't read PDF") }
-                    let layer = page.string ?? ""
-                    let pageText = hasText(layer) ? layer : try recognize(try render(page, dpi: 300), orientation: .up)
+                    var pageText = page.string ?? ""
+                    if !hasText(pageText) {
+                        guard spend(&spent, try renderSize(page, dpi: 300), max: maxPixels) else {
+                            logBudget(source, skipped: min(doc.pageCount, maxPages) - i, max: maxPixels)
+                            break
+                        }
+                        pageText = try recognize(try render(page, dpi: 300), orientation: .up)
+                    }
                     pages.append(pageText.trimmingCharacters(in: .whitespacesAndNewlines))
                 }
                 text = pages.filter { !$0.isEmpty }.joined(separator: "\n\n")

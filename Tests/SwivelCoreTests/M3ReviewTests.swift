@@ -55,3 +55,65 @@ func hostilePageBoxFailsForText(box: String) async throws {
     let out = try ReadBack(outputs[0])
     #expect(out.width == 65535 && (1...21).contains(out.height), "\(out.width)x\(out.height)")
 }
+
+// MARK: F2 TIFF size and per-document pixel budget
+
+private func tiffCompression(_ url: URL) throws -> Int? {
+    let src = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+    let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any]
+    return (props?[kCGImagePropertyTIFFDictionary] as? [CFString: Any])?[kCGImagePropertyTIFFCompression] as? Int
+}
+
+// A blank 2000x2000 page was 12 MB as uncompressed TIFF.
+@Test func pdfPageTIFFIsLZWCompressed() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try writePDF(in: dir, size: CGSize(width: 960, height: 960))
+    guard case .converted(_, let outputs) = await Converter.convert(source, to: .tiff) else { Issue.record("not converted"); return }
+    #expect(try ReadBack(outputs[0]).width == 2000)
+    #expect(try tiffCompression(outputs[0]) == 5)
+    #expect(try Data(contentsOf: outputs[0]).count < 1_000_000)
+}
+
+@Test func imageToTIFFIsLZWCompressed() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try write(.png, in: dir)
+    guard case .converted(_, let outputs) = await Converter.convert(source, to: .tiff) else { Issue.record("not converted"); return }
+    #expect(try tiffCompression(outputs[0]) == 5)
+}
+
+/// Three 480 pt pages: 1000 x 1000 px each at 150 dpi.
+private func megapixelPages(in dir: URL, name: String) throws -> URL {
+    try writePDF(in: dir, name: name, pages: 3, size: CGSize(width: 480, height: 480))
+}
+
+@Test func pagesPastThePixelBudgetAreSkippedAndLogged() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let tag = "budget\(UUID().uuidString.prefix(8))"
+    let source = try megapixelPages(in: dir, name: tag)
+    guard case .converted(_, let outputs) = Converter.renderPDF(source, to: .png, maxPixels: 2_000_000) else {
+        Issue.record("not converted"); return
+    }
+    #expect(outputs.map(\.lastPathComponent) == ["\(tag) page 1.png", "\(tag) page 2.png"])
+    #expect(try loggedLines(containing: "\(tag).pdf: 1 page skipped (max 2 MP)").count == 1)
+}
+
+@Test func firstPageOverThePixelBudgetWritesNothing() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try megapixelPages(in: dir, name: "big")
+    #expect(Converter.renderPDF(source, to: .png, maxPixels: 500_000) == .skipped(source: source, .pageLimit))
+    #expect(try files(in: dir) == ["big.pdf"])
+}
+
+// At 300 dpi each 240 pt page is 1 MP; text-layer pages would not count, these are blank so they are OCR'd.
+@Test func ocrStopsAtThePixelBudgetAndLogs() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let tag = "ocrbudget\(UUID().uuidString.prefix(8))"
+    let source = try writePDF(in: dir, name: tag, pages: 3, size: CGSize(width: 240, height: 240))
+    #expect(await Converter.extractText(source, maxPixels: 2_000_000) == .skipped(source: source, .noText))
+    #expect(try loggedLines(containing: "\(tag).pdf: 1 page skipped (max 2 MP)").count == 1)
+}
