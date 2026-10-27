@@ -84,8 +84,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func logOutcome(_ outcome: Outcome) {
         switch outcome {
-        case .converted(let source, let output):
-            log.info("converted \(source.lastPathComponent, privacy: .public) -> \(output.lastPathComponent, privacy: .public)")
+        case .converted(let source, let outputs):
+            let names = outputs.map(\.lastPathComponent).joined(separator: ", ")
+            log.info("converted \(source.lastPathComponent, privacy: .public) -> \(names, privacy: .public)")
         case .skipped(let source, let reason):
             log.info("skipped \(source.lastPathComponent, privacy: .public): \(reason.description, privacy: .public)")
         case .failed(let source, let reason, let detail):

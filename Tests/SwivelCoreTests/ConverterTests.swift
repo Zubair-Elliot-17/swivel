@@ -107,7 +107,7 @@ func imageIOConvertsToEachOtherFormat(fixture: Fixture, target: ImageFormat) asy
 
     let outcome = await Converter.convert(source, to: target)
     let expected = dir.appendingPathComponent("photo.\(target.fileExtension)")
-    #expect(outcome == .converted(source: source, output: expected))
+    #expect(outcome == .converted(source: source, outputs: [expected]))
 
     let out = try ReadBack(expected)
     #expect(out.type == target.utType.identifier)
@@ -137,7 +137,7 @@ func imageIOConvertsToEachOtherFormat(fixture: Fixture, target: ImageFormat) asy
     let source = try write(.png, in: dir)
 
     let outcome = await Converter.convert(source, to: .jpeg)
-    #expect(outcome == .converted(source: source, output: dir.appendingPathComponent("photo 2.jpg")))
+    #expect(outcome == .converted(source: source, outputs: [dir.appendingPathComponent("photo 2.jpg")]))
     #expect(try Data(contentsOf: existing) == original)
 }
 
@@ -200,7 +200,7 @@ func webPOutputIsWebP(fixture: Fixture) async throws {
     defer { cleanUp(dir) }
     let source = try write(fixture, in: dir)
     let expected = dir.appendingPathComponent("photo.webp")
-    #expect(await Converter.convert(source, to: .webp) == .converted(source: source, output: expected))
+    #expect(await Converter.convert(source, to: .webp) == .converted(source: source, outputs: [expected]))
     #expect(try ReadBack(expected).type == "org.webmproject.webp")
 }
 
@@ -289,7 +289,7 @@ func imagesOverThePixelCapFailBeforeDecoding(target: ImageFormat) async throws {
     var sources = [png]
     for format in [ImageFormat.heic, .tiff] {
         let url = dir.appendingPathComponent("photo.\(format.fileExtension)")
-        #expect(await Converter.convert(png, to: format) == .converted(source: png, output: url))
+        #expect(await Converter.convert(png, to: format) == .converted(source: png, outputs: [url]))
         sources.append(url)
     }
     let existing = dir.appendingPathComponent("photo.jpg")
@@ -298,8 +298,8 @@ func imagesOverThePixelCapFailBeforeDecoding(target: ImageFormat) async throws {
 
     let outcomes = await Converter.convertBatch(sources, to: .jpeg)
     let outputs = outcomes.compactMap { outcome -> String? in
-        guard case .converted(_, let output) = outcome else { return nil }
-        return output.lastPathComponent
+        guard case .converted(_, let outputs) = outcome else { return nil }
+        return outputs.first?.lastPathComponent
     }
     #expect(outputs.count == 3)
     #expect(Set(outputs) == ["photo 2.jpg", "photo 3.jpg", "photo 4.jpg"])
@@ -311,7 +311,7 @@ func imagesOverThePixelCapFailBeforeDecoding(target: ImageFormat) async throws {
     defer { cleanUp(dir) }
     let sources = try (0..<10).map { try write(.png, in: dir, name: "p\($0)") }
     let outcomes = await Converter.convertBatch(sources, to: .jpeg)
-    #expect(outcomes == sources.map { .converted(source: $0, output: $0.deletingPathExtension().appendingPathExtension("jpg")) })
+    #expect(outcomes == sources.map { .converted(source: $0, outputs: [$0.deletingPathExtension().appendingPathExtension("jpg")]) })
 }
 
 @Test(arguments: [0, 1])

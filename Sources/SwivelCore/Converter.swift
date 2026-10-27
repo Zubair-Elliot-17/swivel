@@ -25,7 +25,7 @@ public enum Converter {
         }
         do {
             let data = try encode(src!, to: target)
-            return .converted(source: source, output: try claim(data, source: source, ext: target.fileExtension))
+            return .converted(source: source, outputs: [try claim(data, source: source, ext: target.fileExtension)])
         } catch {
             let full = error.localizedDescription, short = menuReason(for: error)
             return .failed(source: source, reason: short, detail: short == full ? nil : full)
@@ -100,9 +100,9 @@ public enum Converter {
     }
 
     /// Writes `data` to the first free "Keep Both" name; `.withoutOverwriting` makes the claim atomic.
-    static func claim(_ data: Data, source: URL, ext: String) throws -> URL {
+    static func claim(_ data: Data, source: URL, ext: String, suffix: String = "") throws -> URL {
         for attempt in 1...9999 {
-            let url = OutputName.candidate(for: source, ext: ext, attempt: attempt)
+            let url = OutputName.candidate(for: source, ext: ext, attempt: attempt, suffix: suffix)
             do {
                 // shortcut: disk-full may leave partial output, use temp+renamex_np(RENAME_EXCL) if seen
                 try data.write(to: url, options: .withoutOverwriting)
