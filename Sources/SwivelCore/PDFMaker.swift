@@ -59,6 +59,7 @@ extension Converter {
                 continue
             }
             let count = CGImageSourceGetCount(src), room = maxPages - pages
+            var drawn = 0
             do {
                 for i in 0..<count { _ = try pixelSize(src, at: i) }
                 if count > room { log.info("\(url.lastPathComponent, privacy: .public): \(pagesSkipped(count - max(room, 0), max: maxPages), privacy: .public)") }
@@ -82,7 +83,13 @@ extension Converter {
                     ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
                     ctx.endPDFPage()
                     pages += 1
+                    drawn += 1
                 }
+                outcomes.append(nil)
+            } catch where drawn > 0 {
+                // Like a source cut by the page cap: its drawn pages are in the PDF, so it counts as converted.
+                let missing = min(count, room) - drawn
+                log.info("\(url.lastPathComponent, privacy: .public): \(missing) page\(missing == 1 ? "" : "s") not read (\(error.localizedDescription, privacy: .public))")
                 outcomes.append(nil)
             } catch {
                 outcomes.append(failed(url, error))
