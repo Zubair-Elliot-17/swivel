@@ -25,3 +25,14 @@ CoreGraphics PDF context, PDFKit (read/render/text), Vision, the M2 encoders, `O
 
 ## Test plan
 SwivelCore tests on generated fixtures: images → PDF has N pages of the right size and a PNG source stays FlateDecode (not DCTDecode); rotated-EXIF JPEG gives a portrait page; PDF → images page count, naming and 150 dpi size; locked PDF skipped; OCR of large rendered text `contains` the expected words; PDF text layer used without OCR. Manual QA: real Finder drops for each path, 7-slice wheel hit-testing.
+
+## Eng review (scoped, 2026-10-27)
+Feasibility: the researcher's probes on this Mac (macOS 26.6.2, CLT SDK) built CG PDF contexts, PDFKit render/text and Vision OCR with no linker settings or permission prompts. No requirement contradicts a constraint.
+
+Findings, all accepted:
+1. **Combined PDF memory (P2).** Encoding to `Data` (to keep the atomic `claim`) holds the whole PDF in memory. Fine for drops of tens of photos (JPEG passthrough keeps it near source size); cap the combined PDF at 500 pages, skip the rest with a log note.
+2. **Combined PDF and the window (P2).** It is one job, so it doesn't run inside the 4-wide window; draw frames one at a time so only one decoded bitmap is alive (lazily decoded JPEGs aren't decoded at all).
+3. **Thread safety (P2).** `PDFDocument`/`PDFPage` aren't `Sendable`; open, render and read each PDF inside one task, never share across tasks.
+4. **Long OCR (P3).** A 100-page scanned PDF is ~30 s of OCR at 300 dpi; the busy icon covers it, no progress UI in M3.
+5. **Wheel geometry (P2).** 7 slices change every slice angle; geometry tests and the VoiceOver slice elements must follow `sliceNames`, not 6.
+6. **Mixed drops (P3).** Text slice: one `.txt` per source; PDF slice: images in, everything else skipped with a reason.
