@@ -71,3 +71,6 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **isPDF uses the file extension**: a real PDF without .pdf is skipped, a fake .pdf fails.
 - **OCR orientation (M25) and `.accurate` (M26) are unpinned by tests.**
 - **Partly drawn source path untested** (`PDFMaker.swift` catch where drawn > 0): no fixture makes ImageIO size a frame but fail to decode it; needs a decode seam.
+- **Temp PDF left behind if CGContext creation fails** (`PDFMaker.swift:39-41`): `temp` is set before the context check, so a later source's temp replaces it and the first empty `.swivel-*.pdf` stays; remove `file` before throwing.
+- **No `makePDF` read-only-folder test**: reading says "no permission"; add `readOnlyFolderReportsTheWriteError` for `makePDF`.
+- **Placeholder swap race** (`Converter.swift:166-167`): `rename(2)` replaces whatever sits at the claimed name; a process swapping our empty placeholder in that window gets overwritten (accepted for exFAT support).
