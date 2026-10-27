@@ -11,35 +11,43 @@ private func point(_ degrees: Double, radius: Double = 70) -> CGPoint {
     return CGPoint(x: center.x + radius * sin(rad), y: center.y + radius * cos(rad))
 }
 
-private func slice(_ p: CGPoint) -> Int? {
-    Geometry.slice(at: p, center: center, inner: 30, outer: 110, count: 6)
+private let count = Geometry.sliceNames.count
+private let width = 360 / Double(count)
+
+private func slice(_ p: CGPoint, count: Int = count) -> Int? {
+    Geometry.slice(at: p, center: center, inner: 30, outer: 110, count: count)
 }
 
-@Test func wheelHasSixSlices() {
-    #expect(Geometry.sliceNames == ["PNG", "JPEG", "HEIC", "WebP", "TIFF", "PDF"])
+@Test func wheelHasSevenSlices() {
+    #expect(Geometry.sliceNames == ["PNG", "JPEG", "HEIC", "WebP", "TIFF", "PDF", "Text"])
 }
 
-@Test(arguments: [(0.0, 0), (60, 1), (120, 2), (180, 3), (240, 4), (300, 5)])
-func sliceCentres(degrees: Double, expected: Int) {
-    #expect(slice(point(degrees)) == expected)
+@Test(arguments: Geometry.sliceNames.indices)
+func sliceCentres(index: Int) {
+    #expect(slice(point(Double(index) * width)) == index)
 }
 
-@Test(arguments: [(359.0, 0), (1, 0), (329, 5), (331, 0), (29, 0)])
+private let wrapCases: [(Double, Int)] = [
+    (359, 0), (1, 0), (360 - width / 2 - 1, count - 1), (360 - width / 2 + 1, 0), (width / 2 - 1, 0),
+]
+
+@Test(arguments: wrapCases)
 func wrapAroundTop(degrees: Double, expected: Int) {
     #expect(slice(point(degrees)) == expected)
 }
 
-// Only 90° and 270° are exactly representable boundary points; they pin the tie rule.
+// With 2 slices, 90° and 270° are exactly representable boundaries; they pin the tie rule.
 @Test func exactBoundaryGoesToClockwiseSlice() {
-    #expect(slice(CGPoint(x: center.x + 70, y: center.y)) == 2)
-    #expect(slice(CGPoint(x: center.x - 70, y: center.y)) == 5)
+    #expect(slice(CGPoint(x: center.x + 70, y: center.y), count: 2) == 1)
+    #expect(slice(CGPoint(x: center.x - 70, y: center.y), count: 2) == 0)
 }
 
-// sin/cos round-off moves an exact 30° point off the line, so test each side of every boundary.
-@Test(arguments: [(30.0, 0, 1), (90, 1, 2), (150, 2, 3), (210, 3, 4), (270, 4, 5), (330, 5, 0)])
-func everyBoundarySplitsNeighbours(degrees: Double, before: Int, after: Int) {
+// sin/cos round-off moves an exact boundary point off the line, so test each side of every boundary.
+@Test(arguments: Geometry.sliceNames.indices)
+func everyBoundarySplitsNeighbours(before: Int) {
+    let degrees = (Double(before) + 0.5) * width
     #expect(slice(point(degrees - 1e-6)) == before)
-    #expect(slice(point(degrees + 1e-6)) == after)
+    #expect(slice(point(degrees + 1e-6)) == (before + 1) % count)
 }
 
 @Test(arguments: [0.0, 10, 29.9])
@@ -54,7 +62,8 @@ func outsideRingIsNil(radius: Double) {
 
 @Test(arguments: [30.0, 110])
 func ringEdgesAreInside(radius: Double) {
-    #expect(slice(point(60, radius: radius)) == 1)
+    // Straight up is exact; a sin/cos point can round just inside the dead zone.
+    #expect(slice(CGPoint(x: center.x, y: center.y + radius)) == 0)
 }
 
 private let panel = CGSize(width: 240, height: 240)

@@ -63,14 +63,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func drop(_ name: String, _ urls: [URL]) {
         let paths = urls.map(\.path)
         log.info("drop slice=\(name, privacy: .public) urls=\(paths.joined(separator: ", "), privacy: .public)")
-        guard let format = ImageFormat(rawValue: name) else {
-            lastDropLine.title = "PDF arrives in M3"
+        let job: @Sendable () async -> [Outcome]
+        switch (ImageFormat(rawValue: name), name) {
+        case (let format?, _): job = { await Converter.convertBatch(urls, to: format) }
+        case (nil, "PDF"): job = { await Converter.makePDF(urls) }
+        case (nil, "Text"): job = { await Converter.textBatch(urls) }
+        default:
+            log.info("drop on unknown slice \(name, privacy: .public)")
             return
         }
         busy += 1
         updateIcon()
         Task { @MainActor in
-            let outcomes = await Converter.convertBatch(urls, to: format)
+            let outcomes = await job()
             for outcome in outcomes { logOutcome(outcome) }
             // The batch that finishes last owns the line and Reveal.
             let summary = BatchSummary(outcomes)
@@ -84,8 +89,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func logOutcome(_ outcome: Outcome) {
         switch outcome {
-        case .converted(let source, let output):
-            log.info("converted \(source.lastPathComponent, privacy: .public) -> \(output.lastPathComponent, privacy: .public)")
+        case .converted(let source, let outputs):
+            let names = outputs.map(\.lastPathComponent).joined(separator: ", ")
+            log.info("converted \(source.lastPathComponent, privacy: .public) -> \(names, privacy: .public)")
         case .skipped(let source, let reason):
             log.info("skipped \(source.lastPathComponent, privacy: .public): \(reason.description, privacy: .public)")
         case .failed(let source, let reason, let detail):

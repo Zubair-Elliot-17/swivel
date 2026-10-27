@@ -2,7 +2,8 @@ import Foundation
 
 /// Result of converting one dropped file.
 public enum Outcome: Equatable, Sendable {
-    case converted(source: URL, output: URL)
+    /// A PDF source gives one output per page; every source of a combined PDF carries the same output.
+    case converted(source: URL, outputs: [URL])
     case skipped(source: URL, SkipReason)
     /// `reason` is short for the menu; `detail` is the full error text for the log when it differs.
     case failed(source: URL, reason: String, detail: String? = nil)
@@ -31,10 +32,13 @@ public struct BatchSummary {
     public let menuLine: String
 
     public init(_ outcomes: [Outcome]) {
-        var outputs: [URL] = [], skips: [SkipReason] = [], failure: (URL, String)?, failed = 0
+        var outputs: [URL] = [], skips: [SkipReason] = [], failure: (URL, String)?, failed = 0, converted = 0
         for outcome in outcomes {
             switch outcome {
-            case .converted(_, let output): outputs.append(output)
+            case .converted(_, let urls):
+                converted += 1
+                // De-duplicated in first-seen order, so Reveal selects a combined PDF once.
+                for url in urls where !outputs.contains(url) { outputs.append(url) }
             case .skipped(_, let reason): skips.append(reason)
             case .failed(let source, let reason, _):
                 failed += 1
@@ -42,7 +46,7 @@ public struct BatchSummary {
             }
         }
         self.outputs = outputs
-        converted = outputs.count
+        self.converted = converted
         skipped = skips.count
         self.failed = failed
 

@@ -1,0 +1,97 @@
+import CoreGraphics
+import Foundation
+import PDFKit
+
+extension Converter {
+    /// One image per page at 150 dpi, at most `maxPages` and `maxPixels` in all. The document never leaves this call (PDFKit isn't Sendable).
+    static func renderPDF(_ source: URL, to target: ImageFormat, maxPages: Int = 100, maxPixels: Int = pixelBudget) -> Outcome {
+        let doc: PDFDocument
+        switch openPDF(source) {
+        case .success(let opened): doc = opened
+        case .failure(let failure): return failure.outcome
+        }
+        let count = doc.pageCount
+        if count > maxPages {
+            convertLog.info("\(source.lastPathComponent, privacy: .public): \(pagesSkipped(count - maxPages, max: maxPages), privacy: .public)")
+        }
+        var outputs: [URL] = [], spent = 0
+        for i in 0..<min(count, maxPages) {
+            do {
+                guard let page = doc.page(at: i) else { throw ConvertError("couldn't read PDF") }
+                guard spend(&spent, try renderSize(page, dpi: 150), max: maxPixels) else {
+                    logBudget(source, skipped: min(count, maxPages) - i, max: maxPixels)
+                    if outputs.isEmpty { return .skipped(source: source, .pageLimit) }
+                    break
+                }
+                let data = try encode(try render(page, dpi: 150), to: target)
+                let number = String(i + 1)
+                let suffix = count == 1 ? "" : " page " + String(repeating: "0", count: String(count).count - number.count) + number
+                outputs.append(try claim(data, source: source, ext: target.fileExtension, suffix: suffix))
+            } catch {
+                guard case .failed(_, let reason, let detail) = failed(source, error), !outputs.isEmpty else { return failed(source, error) }
+                // shortcut: pages already written stay on disk (same policy as claim), named here for the log.
+                let written = outputs.map(\.lastPathComponent).joined(separator: ", ")
+                return .failed(source: source, reason: reason, detail: "\(detail ?? reason); wrote \(written)")
+            }
+        }
+        return .converted(source: source, outputs: outputs)
+    }
+
+    /// Opens a PDF, or the outcome for one that won't open: unreadable, locked or unparseable.
+    static func openPDF(_ source: URL) -> Result<PDFDocument, OpenFailure> {
+        guard let doc = PDFDocument(url: source), doc.pageCount > 0 else {
+            let outcome = FileManager.default.isReadableFile(atPath: source.path)
+                ? Outcome.failed(source: source, reason: "couldn't read PDF") : .skipped(source: source, .unreadable)
+            return .failure(OpenFailure(outcome: outcome))
+        }
+        // isLocked, not isEncrypted: owner-password-only PDFs open and render.
+        return doc.isLocked ? .failure(OpenFailure(outcome: .skipped(source: source, .locked))) : .success(doc)
+    }
+
+    struct OpenFailure: Error { let outcome: Outcome }
+
+    /// Rendered pixels per document (sum of w x h) for PDF -> images and PDF OCR; stops a page-count bomb filling the disk.
+    public static let pixelBudget = 2_000_000_000
+
+    /// Adds `size` to `spent` unless that would pass `max`.
+    static func spend(_ spent: inout Int, _ size: (width: Int, height: Int), max: Int) -> Bool {
+        guard spent + size.width * size.height <= max else { return false }
+        spent += size.width * size.height
+        return true
+    }
+
+    static func logBudget(_ source: URL, skipped: Int, max: Int) {
+        convertLog.info("\(source.lastPathComponent, privacy: .public): \(pagesSkipped(skipped, max: max / 1_000_000, unit: " MP"), privacy: .public)")
+    }
+
+    /// Pixel size `render` gives the page: crop box at `dpi`, clamped to 200 MP and 65,535 px a side.
+    static func renderSize(_ page: PDFPage, dpi: CGFloat) throws -> (width: Int, height: Int) {
+        var box = page.bounds(for: .cropBox).size
+        if page.rotation % 180 != 0 { box = CGSize(width: box.height, height: box.width) }
+        // Sizes stay Double until in range: a crafted box (e.g. 1e20 x 1e-11 pt) would trap Int().
+        let bw = Double(box.width), bh = Double(box.height)
+        guard bw.isFinite, bh.isFinite, bw >= 1, bh >= 1 else { throw ConvertError("couldn't read PDF") }
+        let scale = min(Double(dpi) / 72, (200_000_000 / (bw * bh)).squareRoot(), 65_535 / bw, 65_535 / bh)
+        let wd = (bw * scale).rounded(), hd = (bh * scale).rounded()
+        guard wd >= 1, hd >= 1, wd <= 65_535, hd <= 65_535 else { throw ConvertError("couldn't read PDF") }
+        return (Int(wd), Int(hd))
+    }
+
+    /// The page at `renderSize`, honouring /Rotate, on opaque white sRGB.
+    static func render(_ page: PDFPage, dpi: CGFloat) throws -> CGImage {
+        let (w, h) = try renderSize(page, dpi: dpi)
+        var box = page.bounds(for: .cropBox).size
+        if page.rotation % 180 != 0 { box = CGSize(width: box.height, height: box.width) }
+        guard let ctx = CGContext(
+            data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+        else { throw ConvertError("couldn't read PDF") }
+        // Pages are transparent and JPEG has no alpha, so start from white.
+        ctx.setFillColor(CGColor(gray: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        ctx.scaleBy(x: CGFloat(w) / box.width, y: CGFloat(h) / box.height)
+        page.draw(with: .cropBox, to: ctx)
+        guard let image = ctx.makeImage() else { throw ConvertError("couldn't read PDF") }
+        return image
+    }
+}

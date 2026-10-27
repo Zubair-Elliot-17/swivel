@@ -3,7 +3,7 @@ import Foundation
 
 /// Pure wheel geometry, kept free of AppKit so it can be unit-tested.
 public enum Geometry {
-    public static let sliceNames = ["PNG", "JPEG", "HEIC", "WebP", "TIFF", "PDF"]
+    public static let sliceNames = ["PNG", "JPEG", "HEIC", "WebP", "TIFF", "PDF", "Text"]
 
     /// Slice under `point`, or nil in the dead zone (`r < inner`) or outside the ring (`r > outer`).
     /// Angles run clockwise from 12 o'clock (y up); slice 0 is centred on the top.

@@ -34,6 +34,17 @@ func outputNames(source: String, attempt: Int, expected: String) {
 }
 
 @Test(arguments: [
+    (1, "", "/Users/me/doc.png"),
+    (1, " page 1", "/Users/me/doc page 1.png"),
+    (2, " page 1", "/Users/me/doc page 1 2.png"),
+    (1, " page 01", "/Users/me/doc page 01.png"),
+])
+func outputNamesWithSuffix(attempt: Int, suffix: String, expected: String) {
+    #expect(OutputName.candidate(for: URL(fileURLWithPath: "/Users/me/doc.pdf"), ext: "png", attempt: attempt, suffix: suffix).path
+        == expected)
+}
+
+@Test(arguments: [
     (UTType?.none, 1, ImageFormat.png, SkipReason?.some(.notImage)),
     (UTType.pdf, 1, .png, .notImage),
     (UTType.folder, 1, .png, .notImage),
@@ -48,7 +59,10 @@ func skipRules(type: UTType?, count: Int, target: ImageFormat, expected: SkipRea
     #expect(skipReason(sourceType: type, imageCount: count, target: target) == expected)
 }
 
-@Test(arguments: [(SkipReason.notImage, "not an image"), (.already(.png), "already PNG"), (.already(.webp), "already WebP"), (.unreadable, "can't read")])
+@Test(arguments: [
+    (SkipReason.notImage, "not an image"), (.already(.png), "already PNG"), (.already(.webp), "already WebP"), (.unreadable, "can't read"),
+    (.alreadyPDF, "already PDF"), (.locked, "password protected"), (.noText, "no text found"), (.pageLimit, "page limit"),
+])
 func skipReasonText(reason: SkipReason, text: String) {
     #expect(reason.description == text)
 }
