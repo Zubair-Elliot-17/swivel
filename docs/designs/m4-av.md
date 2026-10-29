@@ -49,3 +49,13 @@ Out of v1: MP3 output (macOS has no encoder), MKV/WebM/AVI input (skipped as "no
 - macOS 14 is unverified, so runtime checks turn surprises into skips.
 - DRM handling comes from the headers only, because no protected file was available.
 - GIF quality on real camera footage hasn't been tested; it's a manual QA row.
+
+## Eng review (scoped, lead, 2026-10-29)
+1. **Classify in `draggingEntered`, not in DragMonitor.** The M1 and M2 audits rely on DragMonitor reading only `changeCount` and the types, never pasteboard contents. The wheel opens under the pointer, so `draggingEntered` fires almost at once and its `NSDraggingInfo` legitimately carries the URLs. The kind (and so the slice set) is chosen there and stays fixed for that show. Click mode already has its URLs.
+2. **Slice names become per-show state.** Today `WheelView` reads `Geometry.sliceNames` in 6 places, and `sliceElements` is `lazy`. The fix is a `slices: [String]` property; changing it rebuilds the accessibility elements and redraws. `Geometry.slices(for: [URL])` stays pure in SwivelCore so it can be unit-tested. The tie-break and boundary tests already derive from the slice count, and they have to pass for 2, 6 and 7 slices.
+3. **Each slice gets a VoiceOver label**: "Convert to MP4", "Convert to HEVC", "Convert to MOV", "Make GIF", "Extract audio as M4A", "Extract audio as WAV". On an audio-only wheel the M4A and WAV labels are "Convert to M4A" and "Convert to WAV".
+4. **Progress crosses actors as a value.** `convertAV` takes a `@Sendable (Double) -> Void` progress callback, and main.swift hops it to the main actor to update the menu line. SwivelCore stays free of AppKit.
+5. **Cancel keeps the batch `Task` handles** in main.swift, in a set keyed per drop. "Cancel conversions" cancels them all. Image and PDF batches see the cancellation at their next await, and a cancelled source is reported failed "cancelled".
+6. **Tests write their fixtures with AVAssetWriter** at small sizes (1–3 s at 320×240), so the suite stays fast. Cancel and progress are tested on a 20 s fixture. No fixtures are checked in.
+7. **No duration cap on re-encodes** is accepted. Disk full is mapped to "disk full", and the temp file is removed in `defer`.
+8. **Feasibility.** Every API was probed by the researcher under CLT with `swiftc -target arm64-apple-macos14`. The open item is macOS 14 runtime behaviour, which is a carried QA row.
