@@ -1,6 +1,8 @@
 import AVFoundation
 import CoreMedia
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
 extension Converter {
     /// Decodes every audio track, mixed, to 16-bit LPCM at most stereo, into a WAV at `url`.
@@ -61,5 +63,38 @@ extension Converter {
             throw error
         }
         progress(1)
+    }
+
+    /// A looping GIF at 10 fps, long side at most 480 px (never upscaled), from at most 30 s (`avDecision` caps it).
+    /// Frames go into the destination as they arrive; the GIF itself is built in memory.
+    static func makeGIF(_ source: URL, probe p: AVProbe, progress: @Sendable (Double) -> Void) async throws -> Data {
+        // `avDecision` checked the size finite and > 0 and the duration finite in 0...30 s.
+        let side = min(480, max(abs(p.videoSize.width), abs(p.videoSize.height)))
+        guard let count = Int(exactly: max(1, min(gifMaxSeconds * 10, (p.duration * 10).rounded(.down)))) else {
+            throw ConvertError("couldn't make GIF")
+        }
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: source))
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        generator.maximumSize = CGSize(width: side, height: side)
+        defer { generator.cancelAllCGImageGeneration() }
+
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data as CFMutableData, UTType.gif.identifier as CFString, count, nil)
+        else { throw ConvertError("couldn't make GIF") }
+        CGImageDestinationSetProperties(dest, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
+        // 0.1 s is exact in GIF's 1/100 s delays, so it plays at a true 10 fps.
+        let frame = [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 0.1]] as CFDictionary
+        var done = 0
+        for await result in generator.images(for: (0..<count).map { CMTime(value: CMTimeValue($0), timescale: 10) }) {
+            try Task.checkCancellation()
+            CGImageDestinationAddImage(dest, try result.image, frame)
+            done += 1
+            progress(Double(done) / Double(count))
+        }
+        try Task.checkCancellation()
+        guard done == count, CGImageDestinationFinalize(dest) else { throw ConvertError("couldn't make GIF") }
+        return data as Data
     }
 }

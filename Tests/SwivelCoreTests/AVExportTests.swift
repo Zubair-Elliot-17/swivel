@@ -264,7 +264,7 @@ func aacSourcesGive16BitWAV(name: String, type: AVFileType, video: Bool) async t
 
 // Cancelling before the export starts once raised an uncatchable ObjC exception (macOS 26), and a cancelled
 // session could write its file after returning; cancel across the whole conversion, every target.
-@Test(arguments: [AVTarget.mp4, .hevc, .mov, .m4a, .wav])
+@Test(arguments: AVTarget.allCases)
 func cancelAtAnyPointNeverCrashesOrLeavesFiles(target: AVTarget) async throws {
     let dir = try makeScratch()
     defer { cleanUp(dir) }
@@ -281,4 +281,70 @@ func cancelAtAnyPointNeverCrashesOrLeavesFiles(target: AVTarget) async throws {
         let left = try files(in: dir)
         #expect(left == [name], "\(delay) µs: \(left)")
     }
+}
+
+// MARK: GIF (AC 9)
+
+private struct GIFReadBack {
+    let count: Int, loop: Int?, delays: [Double], size: CGSize
+    init(_ url: URL) throws {
+        let src = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+        count = CGImageSourceGetCount(src)
+        let file = CGImageSourceCopyProperties(src, nil) as? [CFString: Any]
+        loop = (file?[kCGImagePropertyGIFDictionary] as? [CFString: Any])?[kCGImagePropertyGIFLoopCount] as? Int
+        delays = (0..<count).map { i in
+            let props = CGImageSourceCopyPropertiesAtIndex(src, i, nil) as? [CFString: Any]
+            return (props?[kCGImagePropertyGIFDictionary] as? [CFString: Any])?[kCGImagePropertyGIFDelayTime] as? Double ?? -1
+        }
+        let first = try #require(CGImageSourceCreateImageAtIndex(src, 0, nil))
+        size = CGSize(width: first.width, height: first.height)
+    }
+}
+
+@Test func twoSecondClipGivesTwentyFramesAtTenFPS() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let src = try await AVFixture.write("clip.mov", in: dir)
+    let log = ProgressLog()
+    let out = try output(await Converter.convertAV(src, to: .gif) { log.add($0) })
+    #expect(out.lastPathComponent == "clip.gif")
+    let gif = try GIFReadBack(out)
+    #expect(gif.count == 20)
+    #expect(gif.delays.allSatisfy { $0 == 0.1 }, "\(gif.delays)")
+    #expect(gif.loop == 0)
+    #expect(gif.size == CGSize(width: 320, height: 240))  // never upscaled
+    let values = log.all
+    #expect(zip(values, values.dropFirst()).allSatisfy { $0 <= $1 } && (values.last ?? 0) >= 0.99, "\(values)")
+    try expectNoTemp(dir)
+}
+
+@Test func gifLongSideIsAtMost480() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let src = try await AVFixture.write("wide.mov", in: dir, audio: false, size: CGSize(width: 960, height: 540), seconds: 1)
+    #expect(try GIFReadBack(try output(await Converter.convertAV(src, to: .gif))).size == CGSize(width: 480, height: 270))
+}
+
+@Test func rotatedClipGivesAnUprightGIF() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let src = try await AVFixture.write("rot.mov", in: dir, seconds: 1, transform: CGAffineTransform(rotationAngle: .pi / 2))
+    #expect(try GIFReadBack(try output(await Converter.convertAV(src, to: .gif))).size == CGSize(width: 240, height: 320))
+}
+
+@Test func longClipFailsGIFAndWritesNothing() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let src = try await AVFixture.write("long.mov", in: dir, audio: false, seconds: 31, frames: 2)
+    #expect(await Converter.convertAV(src, to: .gif) == .failed(source: src, reason: "too long for GIF (max 30 s)"))
+    #expect(try files(in: dir) == ["long.mov"])
+}
+
+@Test func cancelDuringGIFLeavesNothing() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let src = try await AVFixture.write("clip.mov", in: dir, seconds: 20)
+    let outcome = await Task { await Converter.convertAV(src, to: .gif) { _ in withUnsafeCurrentTask { $0?.cancel() } } }.value
+    #expect(outcome == .failed(source: src, reason: "cancelled"))
+    #expect(try files(in: dir) == ["clip.mov"])
 }
