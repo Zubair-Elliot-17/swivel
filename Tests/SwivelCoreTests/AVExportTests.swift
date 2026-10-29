@@ -214,3 +214,71 @@ struct ConvertTestError: Error, CustomStringConvertible {
     #expect(seen.withLock { $0 } == ["a.mov"])
     #expect(BatchSummary(outcomes).menuLine == "Last: a.mp4 (1 of 2, 1 skipped)")
 }
+
+// MARK: WAV (AC 8)
+
+/// Sample format of the first audio track.
+private func pcmFormat(_ url: URL) async throws -> AudioStreamBasicDescription {
+    let track = try #require(try await AVURLAsset(url: url).loadTracks(withMediaType: .audio).first)
+    let desc = try #require(try await track.load(.formatDescriptions).first)
+    return try #require(CMAudioFormatDescriptionGetStreamBasicDescription(desc)?.pointee)
+}
+
+@Test(arguments: [("voice.m4a", AVFileType.m4a, false), ("clip.mov", .mov, true)])
+func aacSourcesGive16BitWAV(name: String, type: AVFileType, video: Bool) async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let src = try await AVFixture.write(name, in: dir, video: video ? .h264 : nil, fileType: type)
+    let log = ProgressLog()
+    let out = try output(await Converter.convertAV(src, to: .wav) { log.add($0) })
+    #expect(out.lastPathComponent == src.deletingPathExtension().lastPathComponent + ".wav")
+    let asbd = try await pcmFormat(out)
+    #expect(asbd.mFormatID == kAudioFormatLinearPCM)
+    #expect(asbd.mBitsPerChannel == 16)
+    #expect(asbd.mFormatFlags & kLinearPCMFormatFlagIsFloat == 0)
+    #expect(asbd.mChannelsPerFrame >= 1 && asbd.mChannelsPerFrame <= 2)
+    #expect(asbd.mSampleRate == 44100)
+    #expect(abs(try await AVFixture.duration(out) - AVFixture.duration(src)) < 0.05)
+    let values = log.all
+    #expect(zip(values, values.dropFirst()).allSatisfy { $0 <= $1 } && (values.last ?? 0) >= 0.99, "\(values)")
+    try expectNoTemp(dir)
+}
+
+@Test func wavSourceIsAlreadyWAV() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let src = try await AVFixture.write("voice.wav", in: dir, video: nil, fileType: .wav)
+    #expect(await Converter.convertAV(src, to: .wav) == .skipped(source: src, .alreadyAV(.wav)))
+}
+
+@Test func cancelDuringWAVLeavesNothing() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let src = try await AVFixture.write("voice.m4a", in: dir, video: nil, seconds: 20, fileType: .m4a)
+    // The first progress call cancels the converting task itself.
+    let outcome = await Task { await Converter.convertAV(src, to: .wav) { _ in withUnsafeCurrentTask { $0?.cancel() } } }.value
+    #expect(outcome == .failed(source: src, reason: "cancelled"))
+    let left = try files(in: dir)
+    #expect(left == ["voice.m4a"], "\(left)")
+}
+
+// Cancelling before the export starts once raised an uncatchable ObjC exception (macOS 26), and a cancelled
+// session could write its file after returning; cancel across the whole conversion, every target.
+@Test(arguments: [AVTarget.mp4, .hevc, .mov, .m4a, .wav])
+func cancelAtAnyPointNeverCrashesOrLeavesFiles(target: AVTarget) async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let name = target == .mov ? "clip.mp4" : "clip.mov"
+    let src = try await AVFixture.write(name, in: dir, fileType: target == .mov ? .mp4 : .mov)
+    for delay in stride(from: 0, through: 12_000, by: 200) {
+        let task = Task { await Converter.convertAV(src, to: target) }
+        try await Task.sleep(for: .microseconds(delay))
+        task.cancel()
+        let outcome = await task.value
+        if case .converted(_, let outputs) = outcome { for url in outputs { try FileManager.default.removeItem(at: url) } } else {
+            #expect(outcome == .failed(source: src, reason: "cancelled"), "\(delay) µs: \(outcome)")
+        }
+        let left = try files(in: dir)
+        #expect(left == [name], "\(delay) µs: \(left)")
+    }
+}

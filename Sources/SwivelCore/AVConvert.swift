@@ -110,17 +110,21 @@ extension Converter {
         _ source: URL, to target: AVTarget, progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async -> Outcome {
         if Task.isCancelled { return .failed(source: source, reason: "cancelled") }
-        let remux: Bool
-        switch avDecision(await probe(source), target) {
+        let p = await probe(source), remux: Bool
+        // A load cut short by the cancel would read as "not supported".
+        if Task.isCancelled { return .failed(source: source, reason: "cancelled") }
+        switch avDecision(p, target) {
         case .skip(let reason): return skipped(source, reason)
         case .fail(let reason): return .failed(source: source, reason: reason)
         case .remux: remux = true
         case .encode: remux = false
         }
         do {
-            guard let output = try await export(source, to: target, remux: remux, progress: progress) else {
-                return skipped(source, .codec)
+            let made: URL? = switch target {
+            case .wav: try await viaTemp(near: source, ext: "wav") { try await writeWAV(source, to: $0, probe: p, progress: progress) }
+            default: try await export(source, to: target, remux: remux, progress: progress)
             }
+            guard let output = made else { return skipped(source, .codec) }
             return .converted(source: source, outputs: [output])
         } catch {
             // Export may surface a cancel as its own error, so the task's state decides.
@@ -170,8 +174,11 @@ extension Converter {
     private static func run(
         _ s: AVAssetExportSession, to url: URL, as type: AVFileType, progress: @escaping @Sendable (Double) -> Void
     ) async throws {
-        // shortcut: a second task only reads `progress` on the non-Sendable session; use states(updateInterval:) at a macOS 15 target.
+        // shortcut: other tasks only read `progress`/`status` and call cancelExport on the non-Sendable session;
+        // use states(updateInterval:) at a macOS 15 target.
         nonisolated(unsafe) let session = s
+        // Never cancelled itself: export(to:as:) in a cancelled task can call exportAsynchronously twice, an ObjC exception.
+        let job = Task { try await session.export(to: url, as: type) }
         let poll = Task {
             while !Task.isCancelled {
                 progress(Double(session.progress))
@@ -179,23 +186,51 @@ extension Converter {
             }
         }
         defer { poll.cancel() }
-        try await session.export(to: url, as: type)
+        try await withTaskCancellationHandler {
+            try await job.value
+        } onCancel: {
+            Task {
+                // cancelExport before the session starts leaves it cancelled before export runs; wait (max 10 s) for it.
+                for _ in 0..<1000 where session.status == .unknown || session.status == .waiting { await pause(10) }
+                session.cancelExport()
+            }
+        }
         poll.cancel()
         await poll.value  // so no late poll value lands after the final 1
         progress(1)
     }
 
     /// Runs `write` into a hidden `.swivel-<UUID>/` folder next to the source, then claims a Keep Both name.
-    /// The folder goes on every path: a session still writing after a cancel can't recreate a file in it.
     static func viaTemp(near source: URL, ext: String, write: (URL) async throws -> Void) async throws -> URL {
         let dir = source.deletingLastPathComponent().appendingPathComponent(".swivel-\(UUID().uuidString)")
         // Creating it first surfaces no permission / read-only before any work.
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let temp = dir.appendingPathComponent("output.\(ext)")
-        try await write(temp)
-        try Task.checkCancellation()
-        return try claim(file: temp, source: source, ext: ext)
+        do {
+            let temp = dir.appendingPathComponent("output.\(ext)")
+            try await write(temp)
+            try Task.checkCancellation()
+            let output = try claim(file: temp, source: source, ext: ext)
+            try? FileManager.default.removeItem(at: dir)
+            return output
+        } catch {
+            await removeLate(dir)
+            throw error
+        }
+    }
+
+    /// A cancelled export can still create its file ~100 ms after returning, which can make the removal fail
+    /// (not empty); retry. Once the folder is gone a late write has nowhere to land.
+    private static func removeLate(_ dir: URL) async {
+        for _ in 0..<20 {
+            if (try? FileManager.default.removeItem(at: dir)) != nil || !FileManager.default.fileExists(atPath: dir.path) { return }
+            await pause(100)
+        }
+        convertLog.error("couldn't remove \(dir.path, privacy: .public)")
+    }
+
+    /// Sleeps even in a cancelled task (Task.sleep returns at once there).
+    private static func pause(_ ms: Int) async {
+        await withCheckedContinuation { done in DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(ms)) { done.resume() } }
     }
 
     /// Reads what `avDecision` needs; never throws. Non-AV files return before any AVAsset is made.
