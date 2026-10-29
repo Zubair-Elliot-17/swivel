@@ -44,6 +44,13 @@ public enum SkipReason: Equatable, Sendable, CustomStringConvertible {
     case noText
     /// Past the combined PDF's page cap.
     case pageLimit
+    /// The container won't open (MKV, WebM, AVI, garbage) or can't be timed.
+    case notSupported
+    case codec
+    case drm
+    case noVideo
+    case noAudio
+    case alreadyAV(AVTarget)
 
     public var description: String {
         switch self {
@@ -54,6 +61,12 @@ public enum SkipReason: Equatable, Sendable, CustomStringConvertible {
         case .locked: "password protected"
         case .noText: "no text found"
         case .pageLimit: "page limit"
+        case .notSupported: "not supported by macOS"
+        case .codec: "codec not supported"
+        case .drm: "DRM protected"
+        case .noVideo: "no video"
+        case .noAudio: "no audio"
+        case .alreadyAV(let target): "already \(target.rawValue)"
         }
     }
 }

@@ -78,3 +78,57 @@ func menuReasonIsShort(error: Error, expected: String) {
     let sixty = String(repeating: "b", count: 60)
     #expect(menuReason(for: NSError(domain: "x", code: 1, userInfo: [NSLocalizedDescriptionKey: sixty])) == sixty)
 }
+
+// MARK: M4 audio/video states
+
+private let cancelledAV: [Outcome] = [
+    ok("a.mov", "a.mp4"), .failed(source: url("b.mov"), reason: "cancelled"), .failed(source: url("c.mov"), reason: "cancelled"),
+    .failed(source: url("d.mov"), reason: "cancelled"), .failed(source: url("e.mov"), reason: "cancelled"),
+]
+private let mixedAV: [Outcome] = [ok("clip.mov", "clip.mp4"), .skipped(source: url("a.jpg"), .noVideo)]
+
+private let avLines: [([Outcome], String)] = [
+    (cancelledAV, "Failed: b.mov: cancelled (1 of 5 converted)"),
+    (mixedAV, "Last: clip.mp4 (1 of 2, 1 skipped)"),
+    ([.skipped(source: url("v.m4a"), .noVideo)], "Skipped 1 of 1: no video"),
+    ([.skipped(source: url("m.mov"), .noAudio)], "Skipped 1 of 1: no audio"),
+    ([.skipped(source: url("x.mkv"), .notSupported)], "Skipped 1 of 1: not supported by macOS"),
+    ([.skipped(source: url("x.mp4"), .codec)], "Skipped 1 of 1: codec not supported"),
+    ([.skipped(source: url("x.m4v"), .drm)], "Skipped 1 of 1: DRM protected"),
+    ([.skipped(source: url("x.mp4"), .alreadyAV(.mp4))], "Skipped 1 of 1: already MP4"),
+    ([.skipped(source: url("x.mp4"), .alreadyAV(.hevc))], "Skipped 1 of 1: already HEVC"),
+    ([.skipped(source: url("x.wav"), .alreadyAV(.wav))], "Skipped 1 of 1: already WAV"),
+]
+
+@Test(arguments: avLines)
+func avMenuLine(outcomes: [Outcome], expected: String) {
+    let s = BatchSummary(outcomes)
+    #expect(s.menuLine == expected)
+    #expect(s.converted + s.skipped + s.failed == outcomes.count)
+}
+
+@Test func avTargetsMatchTheVideoSlices() {
+    #expect(AVTarget.allCases.map(\.rawValue) == ["MP4", "HEVC", "MOV", "GIF", "M4A", "WAV"])
+    #expect(AVTarget.allCases.map(\.fileExtension) == ["mp4", "mp4", "mov", "gif", "m4a", "wav"])
+    #expect(AVTarget.allCases.filter(\.needsVideo) == [.mp4, .hevc, .mov, .gif])
+}
+
+@Test(arguments: [
+    (CancellationError() as Error, "cancelled"),
+    (NSError(domain: "AVFoundationErrorDomain", code: -11807), "disk full"),
+])
+func avMenuReason(error: Error, expected: String) {
+    #expect(menuReason(for: error) == expected)
+}
+
+@Test(arguments: [
+    (0.42, "Converting clip.mov 42% (2 of 5)"),
+    (1.7, "Converting clip.mov 100% (2 of 5)"),
+    (-0.3, "Converting clip.mov 0% (2 of 5)"),
+    (Double.nan, "Converting clip.mov 0% (2 of 5)"),
+    (Double.infinity, "Converting clip.mov 100% (2 of 5)"),
+    (0.999, "Converting clip.mov 99% (2 of 5)"),
+])
+func progressLineIsClamped(fraction: Double, expected: String) {
+    #expect(progressLine(name: "clip.mov", fraction: fraction, index: 2, total: 5) == expected)
+}
