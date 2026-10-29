@@ -105,6 +105,99 @@ func wavTooLarge(duration: Double, rate: Double, channels: Int) -> Bool {
 private func fourCC(_ s: String) -> FourCharCode { s.utf8.reduce(0) { $0 << 8 | FourCharCode($1) } }
 
 extension Converter {
+    /// Converts one audio/video file; never throws. `progress` gets 0...1 from any thread.
+    public static func convertAV(
+        _ source: URL, to target: AVTarget, progress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async -> Outcome {
+        if Task.isCancelled { return .failed(source: source, reason: "cancelled") }
+        let remux: Bool
+        switch avDecision(await probe(source), target) {
+        case .skip(let reason): return skipped(source, reason)
+        case .fail(let reason): return .failed(source: source, reason: reason)
+        case .remux: remux = true
+        case .encode: remux = false
+        }
+        do {
+            guard let output = try await export(source, to: target, remux: remux, progress: progress) else {
+                return skipped(source, .codec)
+            }
+            return .converted(source: source, outputs: [output])
+        } catch {
+            // Export may surface a cancel as its own error, so the task's state decides.
+            if Task.isCancelled || error is CancellationError { return .failed(source: source, reason: "cancelled") }
+            return failed(source, error)
+        }
+    }
+
+    /// `convertAV` for each URL, one at a time (parallel exports share one media engine); keeps input order.
+    public static func avBatch(
+        _ urls: [URL], to target: AVTarget, progress: @escaping @Sendable (URL, Double) -> Void = { _, _ in }
+    ) async -> [Outcome] {
+        await window(urls, maxInFlight: 1) { url in await convertAV(url, to: target) { progress(url, $0) } }
+    }
+
+    /// Fixed (preset, file type) routes, tried in order; every file type must be in the session's supportedFileTypes.
+    static func routes(_ target: AVTarget, remux: Bool) -> [(preset: String, fileType: AVFileType)] {
+        let (encode, type): (String, AVFileType)
+        switch target {
+        case .mp4: (encode, type) = (AVAssetExportPresetHighestQuality, .mp4)
+        case .hevc: (encode, type) = (AVAssetExportPresetHEVCHighestQuality, .mp4)
+        case .mov: (encode, type) = (AVAssetExportPresetHighestQuality, .mov)
+        case .m4a: (encode, type) = (AVAssetExportPresetAppleM4A, .m4a)
+        case .gif, .wav: return []
+        }
+        return (remux ? [(AVAssetExportPresetPassthrough, type)] : []) + [(encode, type)]
+    }
+
+    /// Exports through the first compatible route, or returns nil when none is (never calling export).
+    private static func export(
+        _ source: URL, to target: AVTarget, remux: Bool, progress: @escaping @Sendable (Double) -> Void
+    ) async throws -> URL? {
+        let asset = AVURLAsset(url: source)
+        for route in routes(target, remux: remux) {
+            // A file type outside supportedFileTypes raises an ObjC exception, which Swift can't catch.
+            guard let session = AVAssetExportSession(asset: asset, presetName: route.preset),
+                  session.supportedFileTypes.contains(route.fileType),
+                  await AVAssetExportSession.compatibility(ofExportPreset: route.preset, with: asset, outputFileType: route.fileType)
+            else { continue }
+            return try await viaTemp(near: source, ext: target.fileExtension) { temp in
+                try await run(session, to: temp, as: route.fileType, progress: progress)
+            }
+        }
+        return nil
+    }
+
+    private static func run(
+        _ s: AVAssetExportSession, to url: URL, as type: AVFileType, progress: @escaping @Sendable (Double) -> Void
+    ) async throws {
+        // shortcut: a second task only reads `progress` on the non-Sendable session; use states(updateInterval:) at a macOS 15 target.
+        nonisolated(unsafe) let session = s
+        let poll = Task {
+            while !Task.isCancelled {
+                progress(Double(session.progress))
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+        }
+        defer { poll.cancel() }
+        try await session.export(to: url, as: type)
+        poll.cancel()
+        await poll.value  // so no late poll value lands after the final 1
+        progress(1)
+    }
+
+    /// Runs `write` into a hidden `.swivel-<UUID>/` folder next to the source, then claims a Keep Both name.
+    /// The folder goes on every path: a session still writing after a cancel can't recreate a file in it.
+    static func viaTemp(near source: URL, ext: String, write: (URL) async throws -> Void) async throws -> URL {
+        let dir = source.deletingLastPathComponent().appendingPathComponent(".swivel-\(UUID().uuidString)")
+        // Creating it first surfaces no permission / read-only before any work.
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let temp = dir.appendingPathComponent("output.\(ext)")
+        try await write(temp)
+        try Task.checkCancellation()
+        return try claim(file: temp, source: source, ext: ext)
+    }
+
     /// Reads what `avDecision` needs; never throws. Non-AV files return before any AVAsset is made.
     static func probe(_ url: URL) async -> AVProbe {
         var p = AVProbe()

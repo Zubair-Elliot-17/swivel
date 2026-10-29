@@ -31,10 +31,10 @@ public enum Converter {
         }
     }
 
-    /// A file that exists but won't open (no read permission) isn't "not an image"; folders stay .notImage.
+    /// A file that exists but won't open (no read permission) isn't "not an image" or "not supported"; folders keep the reason.
     static func skipped(_ source: URL, _ reason: SkipReason) -> Outcome {
         var isDir: ObjCBool = false
-        let unreadable = reason == .notImage && FileManager.default.fileExists(atPath: source.path, isDirectory: &isDir)
+        let unreadable = (reason == .notImage || reason == .notSupported) && FileManager.default.fileExists(atPath: source.path, isDirectory: &isDir)
             && !isDir.boolValue && !FileManager.default.isReadableFile(atPath: source.path)
         return .skipped(source: source, unreadable ? .unreadable : reason)
     }
