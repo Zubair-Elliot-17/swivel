@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var finderTap: FinderTap?
     private var revealTargets: [URL] = []
     private var busy = 0  // batches in flight; overlapping drops keep the icon busy until all finish
+    private var qaMode = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -54,6 +55,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         finderTap.refresh()
         self.finderTap = finderTap
+
+        // QA entry point for scripts/qa.sh: SWIVEL_QA=1 Swivel --qa-drop <slice> <path>... runs one drop, prints the menu line, quits.
+        let args = CommandLine.arguments
+        if ProcessInfo.processInfo.environment["SWIVEL_QA"] == "1", args.count > 2, args[1] == "--qa-drop" {
+            qaMode = true
+            drop(args[2], args.dropFirst(3).map { URL(fileURLWithPath: $0) })
+            if busy == 0 { NSApp.terminate(nil) }  // unknown slice: nothing started
+        }
     }
 
     @objc private func enableTap() {
@@ -84,6 +93,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             revealItem.isEnabled = !revealTargets.isEmpty
             busy -= 1
             updateIcon()
+            if qaMode {
+                print(summary.menuLine)
+                NSApp.terminate(nil)
+            }
         }
     }
 

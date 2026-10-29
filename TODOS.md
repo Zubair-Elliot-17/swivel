@@ -58,6 +58,7 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **OCR orientation not proven by a test** (`TextTests.swift` sidewaysPhotoIsReadUpright): Vision reads rotated text even when told `.up`.
 - **Transparent HEIC/WebP stay lossless in a combined PDF** (`PDFMaker.swift`): JPEG would flatten them on black; flatten on white first if file size matters.
 - **Partial pages stay on disk** when a PDF page fails part-way (`PDFRender.swift`): named in the log detail, same policy as the claim shortcut.
+- **PDFKit joins lines in some PDFs** (`TextExtract.swift`): a cupsfilter PDF's page comes out as one line (`PDFPage.string`); CoreText PDFs keep line breaks. scripts/qa.sh compares words for that reason.
 - **PDFKit/Vision work blocks the cooperative pool** like the M2 ImageIO work; a 100-page OCR is ~30 s on one thread.
 
 ## M3 review
