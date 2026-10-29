@@ -68,10 +68,20 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **200 MP page-render/OCR clamp is high for memory** (`PDFRender.swift` renderSize): ~800 MB a page with 4 in flight; consider 50 MP.
 - **M3 file names logged `.public`** (PDFMaker/PDFRender/TextExtract/main.swift), and failure details carry paths: switch to `.private`.
 - **Copy-restricted PDFs still give text** (allowsCopying false): deliberate, the user owns the file.
-- **No cancel for slow PDFs**: a 100-page OCR runs to the end.
+- **No cancel for slow PDFs**: a 100-page OCR runs to the end. M4 "Cancel conversions" stops batches between sources only; OCR still doesn't stop between pages.
 - **isPDF uses the file extension**: a real PDF without .pdf is skipped, a fake .pdf fails.
 - **OCR orientation (M25) and `.accurate` (M26) are unpinned by tests.**
 - **Partly drawn source path untested** (`PDFMaker.swift` catch where drawn > 0): no fixture makes ImageIO size a frame but fail to decode it; needs a decode seam.
 - **Temp PDF left behind if CGContext creation fails** (`PDFMaker.swift:39-41`): `temp` is set before the context check, so a later source's temp replaces it and the first empty `.swivel-*.pdf` stays; remove `file` before throwing.
 - **No `makePDF` read-only-folder test**: reading says "no permission"; add `readOnlyFolderReportsTheWriteError` for `makePDF`.
 - **Placeholder swap race** (`Converter.swift:166-167`): `rename(2)` replaces whatever sits at the claimed name; a process swapping our empty placeholder in that window gets overwritten (accepted for exFAT support).
+
+## M4 audio + video
+- **Vision OCR can starve the cooperative pool** (`TextExtract.swift` recognize): `perform` blocks a pool thread on a semaphore; with ~8 OCR tests in flight, one more blocking job (M4's first WAV reader) deadlocked the test run. M4 moved its own blocking reads to a private queue; move Vision (and the M2 ImageIO work) off the pool too.
+- **macOS 14 cancel path unverified**: there `export(to:as:)` runs Apple's back-deployed body (`guard status != .cancelled`); M4 never enters it in a cancelled task, but only a 14 machine can confirm (QA M4-M5).
+- **`status` / `progress` on AVAssetExportSession are deprecated at macOS 15**: fine at the 14 target; switch to `states(updateInterval:)` when the target moves.
+- **Temp folder kept if it can't be removed in 2 s** (`AVConvert.swift` removeLate): logged as an error, never seen in tests.
+- **Progress index uses `firstIndex(of:)`** (`main.swift` drop): a URL dropped twice reports the first position.
+- **"already MP4" ignores the audio codec**: an `avc1` `.mp4` with ALAC audio is skipped, not re-encoded to AAC.
+- **Image and OCR jobs already running when cancelled finish their file**; the outcome says so (converted).
+- **GIF is built in memory**: ~17 MB worst case at the caps (noise test in research); stream to a temp file if caps grow.
