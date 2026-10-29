@@ -50,8 +50,10 @@ public enum Converter {
     }
 
     /// Runs `job` per URL with at most `maxInFlight` at once; keeps input order.
+    /// Once cancelled, jobs not yet started fail "cancelled"; running ones finish or stop on their own.
     static func window(_ urls: [URL], maxInFlight: Int, job: @escaping @Sendable (URL) async -> Outcome) async -> [Outcome] {
-        await withTaskGroup(of: (Int, Outcome).self) { group in
+        let job: @Sendable (URL) async -> Outcome = { Task.isCancelled ? .failed(source: $0, reason: "cancelled") : await job($0) }
+        return await withTaskGroup(of: (Int, Outcome).self) { group in
             var results = [Outcome?](repeating: nil, count: urls.count)
             var next = 0
             // Sliding window: seed the cap, then start one more as each finishes.

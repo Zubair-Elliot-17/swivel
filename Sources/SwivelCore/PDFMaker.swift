@@ -44,7 +44,10 @@ extension Converter {
         }
         // nil marks a source that gave pages; it becomes .converted once the PDF is claimed.
         var outcomes: [Outcome?] = [], pages = 0
+        // Q8: a cancelled combined PDF writes nothing; the defer removes the temp file.
+        let cancelled = { urls.map { Outcome.failed(source: $0, reason: "cancelled") } }
         for url in urls {
+            if Task.isCancelled { return cancelled() }
             if isPDF(url) {
                 outcomes.append(.skipped(source: url, .alreadyPDF))
                 continue
@@ -95,6 +98,7 @@ extension Converter {
         }
         ctx?.closePDF()
         ctx = nil  // releasing the context flushes the file
+        if Task.isCancelled { return cancelled() }
         guard let temp, let first = outcomes.firstIndex(where: { $0 == nil }) else { return outcomes.map { $0! } }
         do {
             // CGDataConsumer drops write errors (disk full), so check the file before naming it.
