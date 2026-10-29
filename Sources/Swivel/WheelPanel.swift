@@ -42,6 +42,7 @@ final class WheelPanel {
     /// Opens the wheel at `point` for `urls` already chosen (Finder selection); a click picks the slice.
     func showForClick(at point: NSPoint, urls: [URL]) {
         hide()
+        view.slices = Geometry.slices(for: urls)
         view.clickURLs = urls
         place(at: point)
         // Finder keeps the keys, so arrows or typing would change its selection under the wheel: hide on any keyDown (not under VoiceOver).
@@ -100,6 +101,7 @@ final class WheelPanel {
         keyWatch = nil
         view.highlight = nil
         view.clickURLs = nil
+        view.slices = Geometry.sliceNames
         panel.orderOut(nil)
     }
 }
@@ -112,11 +114,24 @@ final class WheelView: NSView {
     var clickURLs: [URL]? {
         didSet { setAccessibilityChildren(clickURLs == nil ? nil : sliceElements) }
     }
-    private lazy var sliceElements: [NSAccessibilityElement] = Geometry.sliceNames.indices.map { i in
-        let c = labelCenter(i), name = Geometry.sliceNames[i]
-        return SliceElement(
-            label: name == "Text" ? "Extract text" : "Convert to \(name)", frame: NSRect(x: c.x - 22, y: c.y - 12, width: 44, height: 24),
-            parent: self, press: { [weak self] in self?.pick(i) })
+    /// The slice set for this show: the image set until a drop's or selection's kind picks another.
+    var slices = Geometry.sliceNames {
+        didSet {
+            guard slices != oldValue else { return }
+            sliceElements = makeSliceElements()
+            if clickURLs != nil { setAccessibilityChildren(sliceElements) }
+            needsDisplay = true
+        }
+    }
+    private var sliceElements: [NSAccessibilityElement] = []
+
+    private func makeSliceElements() -> [NSAccessibilityElement] {
+        slices.indices.map { i in
+            let c = labelCenter(i)
+            return SliceElement(
+                label: Geometry.label(for: slices[i], in: slices), frame: NSRect(x: c.x - 22, y: c.y - 12, width: 44, height: 24),
+                parent: self, press: { [weak self] in self?.pick(i) })
+        }
     }
     var highlight: Int? {
         didSet { if highlight != oldValue { needsDisplay = true } }
@@ -127,6 +142,7 @@ final class WheelView: NSView {
         registerForDraggedTypes([.fileURL])
         setAccessibilityRole(.group)
         setAccessibilityLabel("Swivel format wheel")
+        sliceElements = makeSliceElements()
         // .activeAlways: Swivel is never the active app, so hover needs it.
         addTrackingArea(NSTrackingArea(
             rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
@@ -143,19 +159,19 @@ final class WheelView: NSView {
     private func slice(at windowPoint: NSPoint) -> Int? {
         Geometry.slice(
             at: convert(windowPoint, from: nil), center: CGPoint(x: bounds.midX, y: bounds.midY),
-            inner: innerRadius, outer: outerRadius, count: Geometry.sliceNames.count)
+            inner: innerRadius, outer: outerRadius, count: slices.count)
     }
 
     /// Centre of slice `i`'s label, in view coordinates.
     func labelCenter(_ i: Int) -> CGPoint {
-        let mid = CGFloat(i) * 2 * .pi / CGFloat(Geometry.sliceNames.count), r = (innerRadius + outerRadius) / 2
+        let mid = CGFloat(i) * 2 * .pi / CGFloat(slices.count), r = (innerRadius + outerRadius) / 2
         return CGPoint(x: bounds.midX + r * sin(mid), y: bounds.midY + r * cos(mid))
     }
 
     /// Click mode: convert the Finder selection with slice `i`.
     func pick(_ i: Int) {
-        guard let urls = clickURLs else { return }
-        onDrop?(Geometry.sliceNames[i], urls)
+        guard let urls = clickURLs, slices.indices.contains(i) else { return }
+        onDrop?(slices[i], urls)
     }
 
     // The panel is never key, so the first click must act.
@@ -175,7 +191,9 @@ final class WheelView: NSView {
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        draggingUpdated(sender)
+        // The wheel opens under the pointer, so this comes at once; the set stays fixed for the show (Q3).
+        if clickURLs == nil { slices = Geometry.slices(for: fileURLs(sender)) }
+        return draggingUpdated(sender)
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
@@ -189,21 +207,22 @@ final class WheelView: NSView {
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        guard let index = slice(for: sender),
-              let urls = sender.draggingPasteboard.readObjects(
-                  forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
-              !urls.isEmpty
-        else { return false }
-        // Finder can hand over /.file/id= reference URLs; resolve them to real paths.
-        onDrop?(Geometry.sliceNames[index], urls.map { ($0 as NSURL).filePathURL ?? $0 })
+        let urls = fileURLs(sender)
+        guard let index = slice(for: sender), !urls.isEmpty else { return false }
+        onDrop?(slices[index], urls)
         return true
+    }
+
+    /// The dragged file URLs; Finder can hand over /.file/id= reference URLs, resolved here to real paths.
+    private func fileURLs(_ sender: NSDraggingInfo) -> [URL] {
+        let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
+        return (urls ?? []).map { ($0 as NSURL).filePathURL ?? $0 }
     }
 
     override func draw(_ dirtyRect: NSRect) {
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
-        let count = Geometry.sliceNames.count
-        let width = 360 / CGFloat(count)
-        for (i, name) in Geometry.sliceNames.enumerated() {
+        let width = 360 / CGFloat(slices.count)
+        for (i, name) in slices.enumerated() {
             // Slice angles run clockwise from 12 o'clock; AppKit arcs run counter-clockwise from 3 o'clock.
             let start = 90 - (CGFloat(i) * width - width / 2), end = start - width
             let wedge = NSBezierPath()
