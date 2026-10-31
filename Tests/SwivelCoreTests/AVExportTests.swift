@@ -281,6 +281,10 @@ func cancelAtAnyPointNeverCrashesOrLeavesFiles(target: AVTarget) async throws {
         let left = try files(in: dir)
         #expect(left == [name], "\(delay) µs: \(left)")
     }
+    // A cancelled export can write its file ~100 ms after returning; look again once any late write would have landed.
+    try await Task.sleep(for: .milliseconds(300))
+    let left = try files(in: dir)
+    #expect(left == [name], "after 300 ms: \(left)")
 }
 
 // MARK: GIF (AC 9)
