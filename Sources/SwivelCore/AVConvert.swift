@@ -30,6 +30,8 @@ public struct AVProbe: Sendable {
     public var playable = false, protected = false
     /// Raw `CMTime.seconds`: may be NaN, infinite, negative or huge.
     public var duration = Double.nan
+    /// Raw seconds of the first video track's time range; a GIF covers only that span.
+    public var videoStart = Double.nan, videoDuration = Double.nan
     public var hasVideo = false, hasAudio = false
     public var videoCodec: FourCharCode?, audioCodec: FourCharCode?
     /// Natural size after the preferred transform, so a side can be negative.
@@ -84,7 +86,8 @@ public func avDecision(_ p: AVProbe, _ t: AVTarget) -> AVDecision {
         if type.conforms(to: .mpeg4Audio) && aac && !p.hasVideo { return .skip(.alreadyAV(.m4a)) }
         return aac ? .remux : .encode
     case .gif:
-        return p.duration > gifMaxSeconds ? .fail("too long for GIF (max 30 s)") : .encode
+        guard p.videoStart.isFinite, p.videoStart >= 0, p.videoDuration.isFinite, p.videoDuration > 0 else { return .skip(.notSupported) }
+        return p.videoDuration > gifMaxSeconds ? .fail("too long for GIF (max 30 s)") : .encode
     case .wav:
         if type.conforms(to: .wav) { return .skip(.alreadyAV(.wav)) }
         let f = wavFormat(rate: p.audioRate, channels: p.audioChannels)
@@ -247,8 +250,9 @@ extension Converter {
             (p.playable, p.protected, p.duration) = (playable, protected, duration.seconds)
             if let video = try await asset.loadTracks(withMediaType: .video).first {
                 p.hasVideo = true
-                let (size, transform, formats) = try await video.load(.naturalSize, .preferredTransform, .formatDescriptions)
+                let (size, transform, formats, range) = try await video.load(.naturalSize, .preferredTransform, .formatDescriptions, .timeRange)
                 p.videoSize = size.applying(transform)
+                (p.videoStart, p.videoDuration) = (range.start.seconds, range.duration.seconds)
                 p.videoCodec = formats.first.map(CMFormatDescriptionGetMediaSubType)
             }
             if let audio = try await asset.loadTracks(withMediaType: .audio).first {

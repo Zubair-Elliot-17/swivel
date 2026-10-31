@@ -7,10 +7,11 @@ import Testing
 enum AVFixture {
     enum Video { case h264, hevc }
 
-    /// `frames` defaults to 10 per second; `fileType` .wav writes 16-bit LPCM audio, every other type AAC.
+    /// `frames` defaults to 10 per second; `audioSeconds` to `seconds`; `fileType` .wav writes 16-bit LPCM audio, every other type AAC.
     static func write(
         _ name: String, in dir: URL, video: Video? = .h264, audio: Bool = true, size: CGSize = CGSize(width: 320, height: 240),
-        seconds: Double = 2, frames: Int? = nil, transform: CGAffineTransform = .identity, fileType: AVFileType = .mov
+        seconds: Double = 2, audioSeconds: Double? = nil, frames: Int? = nil, transform: CGAffineTransform = .identity,
+        fileType: AVFileType = .mov
     ) async throws -> URL {
         let url = dir.appendingPathComponent(name)
         let writer = try AVAssetWriter(outputURL: url, fileType: fileType)
@@ -57,7 +58,7 @@ enum AVFixture {
             var format: CMAudioFormatDescription?
             CMAudioFormatDescriptionCreate(allocator: nil, asbd: &asbd, layoutSize: 0, layout: nil, magicCookieSize: 0, magicCookie: nil,
                                            extensions: nil, formatDescriptionOut: &format)
-            let chunk = 4410, chunks = Int((seconds * 10).rounded())
+            let chunk = 4410, chunks = Int(((audioSeconds ?? seconds) * 10).rounded())
             lanes.append((input, (0..<chunks).map { c in {
                 var samples = (0..<chunk).map { Int16(8000 * sin(Double(c * chunk + $0) * 2 * .pi * 440 / 44100)) }
                 var block: CMBlockBuffer?
@@ -87,7 +88,7 @@ enum AVFixture {
             }
             if !progressed { try await Task.sleep(for: .milliseconds(1)) }
         }
-        writer.endSession(atSourceTime: CMTime(seconds: seconds, preferredTimescale: 600))
+        writer.endSession(atSourceTime: CMTime(seconds: max(seconds, audio ? audioSeconds ?? 0 : 0), preferredTimescale: 600))
         await writer.finishWriting()
         #expect(writer.status == .completed, "\(String(describing: writer.error))")
         return url

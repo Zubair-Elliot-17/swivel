@@ -14,6 +14,7 @@ private func healthyMov(_ change: (inout AVProbe) -> Void = { _ in }) -> AVProbe
     p.opened = true
     p.playable = true
     p.duration = 2
+    (p.videoStart, p.videoDuration) = (0, 2)
     p.hasVideo = true
     p.hasAudio = true
     p.videoCodec = fourCC("avc1")

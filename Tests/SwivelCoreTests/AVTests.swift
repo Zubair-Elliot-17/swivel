@@ -13,6 +13,7 @@ private func movProbe(_ change: (inout AVProbe) -> Void = { _ in }) -> AVProbe {
     p.opened = true
     p.playable = true
     p.duration = 2
+    (p.videoStart, p.videoDuration) = (0, 2)
     p.hasVideo = true
     p.hasAudio = true
     p.videoCodec = fourCC("avc1")
@@ -82,7 +83,7 @@ func badDurationsSkip(target: AVTarget) {
 
 @Test func hugeFiniteDurations() {
     #expect(huge > 9e18 && huge.isFinite)
-    let p = movProbe { $0.duration = huge }
+    let p = movProbe { $0.duration = huge; $0.videoDuration = huge }
     #expect(avDecision(p, .gif) == .fail("too long for GIF (max 30 s)"))
     #expect(avDecision(p, .wav) == .fail("too long for WAV (4 GB limit)"))
     // No cap on streamed re-encodes (design finding 7).
@@ -90,8 +91,8 @@ func badDurationsSkip(target: AVTarget) {
     #expect(avDecision(p, .hevc) == .encode)
     #expect(avDecision(p, .mov) == .skip(.alreadyAV(.mov)))
     #expect(avDecision(p, .m4a) == .remux)
-    #expect(avDecision(movProbe { $0.duration = 30 }, .gif) == .encode)
-    #expect(avDecision(movProbe { $0.duration = 30.01 }, .gif) == .fail("too long for GIF (max 30 s)"))
+    #expect(avDecision(movProbe { $0.duration = 30; $0.videoDuration = 30 }, .gif) == .encode)
+    #expect(avDecision(movProbe { $0.duration = 30.01; $0.videoDuration = 30.01 }, .gif) == .fail("too long for GIF (max 30 s)"))
 }
 
 @Test func videoSizes() {

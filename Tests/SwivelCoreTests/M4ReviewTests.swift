@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import ImageIO
 import Testing
 @testable import SwivelCore
 
@@ -39,4 +40,35 @@ func extremeRateSourceConvertsToWAV(rate: Double, expected: Double) async throws
     #expect(try await wavFormatOf(out).mSampleRate == expected)
     #expect(abs(try await AVURLAsset(url: out).load(.duration).seconds - 1) < 0.05)
     #expect(try files(in: dir) == ["tone.caf", "tone.wav"])
+}
+
+// MARK: F2 GIF length from the video track
+
+// A 1 s video under 6 s of audio: frames past the video's end once failed the whole GIF.
+@Test func gifUsesTheVideoTrackLength() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let src = try await AVFixture.write("short.mov", in: dir, seconds: 1, audioSeconds: 6)
+    #expect(abs(try await AVFixture.duration(src) - 6) < 0.05)
+    let outcome = await Converter.convertAV(src, to: .gif)
+    guard case .converted(_, let outputs) = outcome, let out = outputs.first else { Issue.record("\(outcome)"); return }
+    let gif = try #require(CGImageSourceCreateWithURL(out as CFURL, nil))
+    #expect(CGImageSourceGetCount(gif) == 10)
+    try expectNoTemp(dir)
+}
+
+// The cap and the hostile-value checks read the video track's span, not the file's.
+@Test func gifDecisionUsesTheVideoSpan() {
+    var p = AVProbe()
+    (p.contentType, p.opened, p.playable, p.hasVideo, p.videoSize) = (.quickTimeMovie, true, true, true, CGSize(width: 320, height: 240))
+    (p.duration, p.videoStart, p.videoDuration) = (60, 0, 1)
+    #expect(avDecision(p, .gif) == .encode)
+    (p.duration, p.videoDuration) = (31, 30.5)
+    #expect(avDecision(p, .gif) == .fail("too long for GIF (max 30 s)"))
+    for bad in [0, -1, Double.nan, .infinity] {
+        (p.videoStart, p.videoDuration) = (0, bad)
+        #expect(avDecision(p, .gif) == .skip(.notSupported), "duration \(bad)")
+        (p.videoStart, p.videoDuration) = (bad == 0 ? -1 : bad, 1)
+        #expect(avDecision(p, .gif) == .skip(.notSupported), "start \(bad)")
+    }
 }
