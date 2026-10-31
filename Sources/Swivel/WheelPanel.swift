@@ -222,6 +222,10 @@ final class WheelView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         let width = 360 / CGFloat(slices.count)
+        // A clear hub passes drops through to the window below (Finder moves the file); a faint fill keeps it ours.
+        NSColor.black.withAlphaComponent(0.01).setFill()
+        NSBezierPath(ovalIn: NSRect(x: center.x - innerRadius, y: center.y - innerRadius,
+                                    width: innerRadius * 2, height: innerRadius * 2)).fill()
         for (i, name) in slices.enumerated() {
             // Slice angles run clockwise from 12 o'clock; AppKit arcs run counter-clockwise from 3 o'clock.
             let start = 90 - (CGFloat(i) * width - width / 2), end = start - width
