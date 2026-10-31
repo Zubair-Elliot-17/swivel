@@ -197,6 +197,8 @@ extension Converter {
             Task {
                 // cancelExport before the session starts leaves it cancelled before export runs; wait (max 10 s) for it.
                 for _ in 0..<1000 where session.status == .unknown || session.status == .waiting { await pause(10) }
+                // Still not started: cancelling now raises the same exception; the export runs out and viaTemp drops it.
+                guard session.status != .unknown else { convertLog.error("export never started; not cancelled"); return }
                 session.cancelExport()
             }
         }
