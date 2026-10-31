@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var revealTargets: [URL] = []
     private var busy = 0  // batches in flight; overlapping drops keep the icon busy until all finish
     private var drops: [UUID: Task<Void, Never>] = [:]  // running batches, for Cancel conversions
+    private var lineOwner: UUID?  // the newest drop; only it writes the Last line and Reveal
     private var qaMode = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -96,15 +97,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         busy += 1
         updateIcon()
+        lineOwner = id
         drops[id] = Task { @MainActor in
             let outcomes = await job()
             drops[id] = nil  // before the summary, so a late progress hop can't overwrite it
             for outcome in outcomes { logOutcome(outcome) }
-            // The batch that finishes last owns the line and Reveal.
             let summary = BatchSummary(outcomes)
-            lastDropLine.title = summary.menuLine
-            revealTargets = summary.outputs
-            revealItem.isEnabled = !revealTargets.isEmpty
+            if lineOwner == id {
+                lastDropLine.title = summary.menuLine
+                revealTargets = summary.outputs
+                revealItem.isEnabled = !revealTargets.isEmpty
+            }
             busy -= 1
             updateIcon()
             if qaMode {
@@ -114,9 +117,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Progress from a batch still running; one that already finished keeps its summary.
+    /// Progress from the owning batch while it runs; once finished it keeps its summary.
     private func showProgress(_ line: String, for id: UUID) {
-        if drops[id] != nil { lastDropLine.title = line }
+        if lineOwner == id, drops[id] != nil { lastDropLine.title = line }
     }
 
     @objc private func cancelConversions() {
