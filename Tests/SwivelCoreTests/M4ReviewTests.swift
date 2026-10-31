@@ -72,3 +72,26 @@ func extremeRateSourceConvertsToWAV(rate: Double, expected: Double) async throws
         #expect(avDecision(p, .gif) == .skip(.notSupported), "start \(bad)")
     }
 }
+
+// MARK: F5 makePDF cancelled between sources
+
+// Q8 at every point of the loop: the open PDF is closed and dropped, nothing is written.
+@Test func makePDFCancelledMidwayWritesNothing() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let urls = try (0..<40).map { try write(.png, in: dir, name: "p\($0)") }
+    let sources = try files(in: dir)
+    for delay in stride(from: 0, through: 12_000, by: 250) {
+        let task = Task { await Converter.makePDF(urls) }
+        try await Task.sleep(for: .microseconds(delay))
+        task.cancel()
+        let outcomes = await task.value
+        if case .converted(_, let outputs) = outcomes[0] {
+            #expect(outcomes == urls.map { .converted(source: $0, outputs: outputs) }, "\(delay) µs")
+            for url in outputs { try FileManager.default.removeItem(at: url) }
+        } else {
+            #expect(outcomes == urls.map { .failed(source: $0, reason: "cancelled") }, "\(delay) µs: \(outcomes)")
+        }
+        #expect(try files(in: dir) == sources, "\(delay) µs")
+    }
+}

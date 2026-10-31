@@ -47,7 +47,7 @@ extension Converter {
         // Q8: a cancelled combined PDF writes nothing; the defer removes the temp file.
         let cancelled = { urls.map { Outcome.failed(source: $0, reason: "cancelled") } }
         for url in urls {
-            if Task.isCancelled { return cancelled() }
+            if Task.isCancelled { break }  // closes the PDF below, then reports every source cancelled
             if isPDF(url) {
                 outcomes.append(.skipped(source: url, .alreadyPDF))
                 continue
