@@ -99,3 +99,8 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **App-layer fixes untested** (`main.swift` lineOwner, progress dedupe): move into a small testable type or keep to manual QA.
 - **qa.sh m46r setup can end the run without a FAIL line** (`scripts/qa.sh` ~138): add `|| { echo "FAIL setup: m46r fixtures"; exit 1; }`.
 - **qa.sh `afinfo | grep -q` can SIGPIPE under pipefail** (`scripts/qa.sh` ~141): use `grep -q … <<<"$(afinfo …)"`.
+
+## Hub fix re-check (P3)
+- **Right-click in the click-mode hub doesn't dismiss** (`WheelPanel.swift` WheelView): the hub is now ours, so the global right-click monitor never sees it; add `rightMouseDown` → `onDismiss` in click mode.
+- **Hub pass-through has no automated test**: it happens in WindowServer; keep "drop in the wheel centre, file stays put" as a manual QA row.
+- **Wheel can't be driven by scripted QA**: manual rows were run with synthetic CGEvent drags + AX presses (scratchpad tools); worth turning into `scripts/qa-ui.sh` if UI rows keep growing.
