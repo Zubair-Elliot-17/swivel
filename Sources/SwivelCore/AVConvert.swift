@@ -126,7 +126,7 @@ extension Converter {
         do {
             let made: URL? = switch target {
             case .wav: try await viaTemp(near: source, ext: "wav") { try await writeWAV(source, to: $0, probe: p, progress: progress) }
-            case .gif: try claim(await makeGIF(source, probe: p, progress: progress), source: source, ext: "gif")
+            case .gif: try await viaTemp(near: source, ext: "gif") { try await makeGIF(source, probe: p, progress: progress).write(to: $0) }
             default: try await export(source, to: target, remux: remux, progress: progress)
             }
             guard let output = made else { return skipped(source, .codec) }

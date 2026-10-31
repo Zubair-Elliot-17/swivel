@@ -95,3 +95,22 @@ func extremeRateSourceConvertsToWAV(rate: Double, expected: Double) async throws
         #expect(try files(in: dir) == sources, "\(delay) µs")
     }
 }
+
+// MARK: F6 GIF written through the temp folder
+
+// A GIF now goes through viaTemp like WAV/export: same Keep Both naming, no temp left, read-only fails cleanly.
+@Test func gifGoesThroughTheTempFolder() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let src = try await AVFixture.write("clip.mov", in: dir)
+    for name in ["clip.gif", "clip 2.gif"] {
+        let outcome = await Converter.convertAV(src, to: .gif)
+        #expect(outcome == .converted(source: src, outputs: [dir.appendingPathComponent(name)]), "\(outcome)")
+    }
+    try expectNoTemp(dir)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
+    let outcome = await Converter.convertAV(src, to: .gif)
+    guard case .failed(_, let reason, _) = outcome else { Issue.record("\(outcome)"); return }
+    #expect(reason == "no permission")
+    #expect(try files(in: dir) == ["clip.mov", "clip.gif", "clip 2.gif"])
+}
