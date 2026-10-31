@@ -92,3 +92,10 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **Failed temp removal not logged on success** (`AVConvert.swift` viaTemp): `try?` drops the error after a claim; log it like removeLate does.
 - **Untested: disk full and the same source dropped twice at once**: needs a small disk image fixture and two overlapping convertAV calls on one file.
 - **`show(at:)` keeps the previous slice set until draggingEntered** (`WheelPanel.swift`): a wheel shown for a new drag briefly draws the last drag's slices.
+
+## M4 fix re-check (P3)
+- **GIF frame times round the track start to 1/600 s** (`AVRender.swift` makeGIF): an edit list starting at e.g. 1001/30000 s asks for frame 0 just before the track; keep the probe's CMTime start.
+- **Cancel ignored for an export stuck in `.unknown`** (`AVConvert.swift` run): after the 10 s wait, keep polling until it starts, then cancelExport; today it runs to the end and is discarded.
+- **App-layer fixes untested** (`main.swift` lineOwner, progress dedupe): move into a small testable type or keep to manual QA.
+- **qa.sh m46r setup can end the run without a FAIL line** (`scripts/qa.sh` ~138): add `|| { echo "FAIL setup: m46r fixtures"; exit 1; }`.
+- **qa.sh `afinfo | grep -q` can SIGPIPE under pipefail** (`scripts/qa.sh` ~141): use `grep -q … <<<"$(afinfo …)"`.
