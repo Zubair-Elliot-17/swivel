@@ -13,7 +13,7 @@ The Finder tap reads the selection through Apple events, so it needs Automation 
 
 ### Dev rebuilds
 
-`scripts/bundle.sh` signs ad hoc, so every rebuild looks like a new app to the privacy system and the Automation grant goes stale. After a rebuild, reset it and enable again:
+An ad-hoc signature changes with every build, so the privacy system treats each rebuild as a new app and the Automation grant goes stale. Run `scripts/dev-cert.sh` once: it makes a self-signed "Swivel Dev" code-signing identity in your login keychain, and `scripts/bundle.sh` signs with it from then on, so a grant survives rebuilds. Without it the bundle is still signed ad hoc, and after each rebuild you need:
 
 ```sh
 scripts/bundle.sh && tccutil reset AppleEvents dev.zubair.swivel && open build/Swivel.app
