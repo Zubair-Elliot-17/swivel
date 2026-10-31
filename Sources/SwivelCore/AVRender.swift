@@ -8,7 +8,7 @@ extension Converter {
     /// Decodes every audio track, mixed, to 16-bit LPCM at most stereo, into a WAV at `url`.
     /// `canAdd` guards each add: a bad add raises an ObjC exception.
     static func writeWAV(_ source: URL, to url: URL, probe p: AVProbe, progress: @Sendable (Double) -> Void) async throws {
-        let asset = AVURLAsset(url: source)
+        let asset = mediaAsset(source)
         let tracks = try await asset.loadTracks(withMediaType: .audio)
         let format = wavFormat(rate: p.audioRate, channels: p.audioChannels)
         let pcm: [String: Any] = [
@@ -73,7 +73,7 @@ extension Converter {
         guard let count = Int(exactly: max(1, min(gifMaxSeconds * 10, (p.videoDuration * 10).rounded(.down)))) else {
             throw ConvertError("couldn't make GIF")
         }
-        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: source))
+        let generator = AVAssetImageGenerator(asset: mediaAsset(source))
         generator.appliesPreferredTrackTransform = true
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero

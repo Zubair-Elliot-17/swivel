@@ -162,7 +162,7 @@ extension Converter {
     private static func export(
         _ source: URL, to target: AVTarget, remux: Bool, progress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL? {
-        let asset = AVURLAsset(url: source)
+        let asset = mediaAsset(source)
         for route in routes(target, remux: remux) {
             // A file type outside supportedFileTypes raises an ObjC exception, which Swift can't catch.
             guard let session = AVAssetExportSession(asset: asset, presetName: route.preset),
@@ -240,13 +240,18 @@ extension Converter {
         await withCheckedContinuation { done in DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(ms)) { done.resume() } }
     }
 
+    /// A file's asset that never follows references (a movie can point at other local files or URLs).
+    static func mediaAsset(_ url: URL) -> AVURLAsset {
+        AVURLAsset(url: url, options: [AVURLAssetReferenceRestrictionsKey: AVAssetReferenceRestrictions.forbidAll.rawValue])
+    }
+
     /// Reads what `avDecision` needs; never throws. Non-AV files return before any AVAsset is made.
     static func probe(_ url: URL) async -> AVProbe {
         var p = AVProbe()
         p.contentType = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType
             ?? UTType(filenameExtension: url.pathExtension)
         guard p.contentType?.conforms(to: .audiovisualContent) == true else { return p }
-        let asset = AVURLAsset(url: url)
+        let asset = mediaAsset(url)
         do {
             let (playable, protected, duration) = try await asset.load(.isPlayable, .hasProtectedContent, .duration)
             (p.playable, p.protected, p.duration) = (playable, protected, duration.seconds)

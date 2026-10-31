@@ -114,3 +114,9 @@ func extremeRateSourceConvertsToWAV(rate: Double, expected: Double) async throws
     #expect(reason == "no permission")
     #expect(try files(in: dir) == ["clip.mov", "clip.gif", "clip 2.gif"])
 }
+
+// MARK: F7 no external media references
+
+@Test func mediaAssetsForbidReferences() {
+    #expect(Converter.mediaAsset(URL(fileURLWithPath: "/tmp/x.mov")).referenceRestrictions == .forbidAll)
+}
