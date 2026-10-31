@@ -91,8 +91,9 @@ mkdir -p r7/folder && cp a.jpg r7/
 expect "M2b-7" "$(drop PNG r7/a.jpg r7/folder)" "Last: a.png (1 of 2, 1 skipped)"
 
 # M4 fixtures: AVAssetWriter clips (scripts/avq.swift), say + afconvert audio, a junk .mp4.
-swiftc -O "$ROOT/scripts/avq.swift" -o avq 2>/dev/null
-./avq mk clip.mov 2 20 1 0 && ./avq mk rot.mov 2 20 1 1 && ./avq mk mute.mov 2 20 0 0 && ./avq mk long.mov 31 2 0 0
+swiftc -O "$ROOT/scripts/avq.swift" -o avq || { echo "FAIL setup: avq did not compile"; exit 1; }
+{ ./avq mk clip.mov 2 20 1 0 && ./avq mk rot.mov 2 20 1 1 && ./avq mk mute.mov 2 20 0 0 && ./avq mk long.mov 31 2 0 0; } \
+  || { echo "FAIL setup: avq mk failed"; exit 1; }
 say -o voice.aiff "Swivel audio test"
 afconvert -f m4af -d aac voice.aiff voice.m4a && afconvert -f WAVE -d LEI16 voice.aiff voice.wav && afconvert -f mp4f -d aac voice.aiff voice.mp4
 printf junk > bad.mp4
@@ -116,10 +117,11 @@ expect "M4-3 MP4" "$(drop MP4 m43/clip.mp4)" "Skipped 1 of 1: already MP4"
 # M4-4: GIFs at 10 fps, 320 px (no upscale), rotated clip upright.
 fresh m44 clip.mov rot.mov
 expect M4-4 "$(drop GIF m44/clip.mov m44/rot.mov)" "Last: rot.gif (2 of 2)"
-read -r n w h delay loop < <(./avq gif m44/clip.gif)
+# `|| true`: an avq crash leaves the fields empty, so the row FAILs instead of set -e ending the run.
+read -r n w h delay loop < <(./avq gif m44/clip.gif) || true
 [ "$n $w $h $delay $loop" = "20 320 240 0.1 0" ] && pass "M4-4 clip.gif" || fail "M4-4 clip.gif" "$n frames ${w}x$h delay $delay loop $loop"
-read -r n w h _ < <(./avq gif m44/rot.gif)
-[ "$h" -gt "$w" ] && pass "M4-4 rot.gif upright (${w}x$h)" || fail "M4-4 rot.gif" "${w}x$h"
+read -r n w h _ < <(./avq gif m44/rot.gif) || true
+[ "${h:-0}" -gt "${w:-0}" ] && pass "M4-4 rot.gif upright (${w}x$h)" || fail "M4-4 rot.gif" "${w}x$h"
 
 # M4-5: audio out of a video, and WAV to M4A.
 fresh m45 clip.mov voice.wav
@@ -147,7 +149,7 @@ expect "M4-7 long" "$(drop GIF m47/long.mov)" "Failed: long.mov: too long for GI
 want="bad.mp4 long.mov mute.mov voice.mp4 "
 # Q6: VP9 only when ffmpeg is installed; it is never a project dependency.
 if command -v ffmpeg >/dev/null; then
-  ffmpeg -loglevel error -f lavfi -i testsrc=size=320x240:rate=10 -t 2 -c:v libvpx-vp9 -deadline realtime -cpu-used 8 m47/vp9.mp4
+  ffmpeg -nostdin -loglevel error -f lavfi -i testsrc=size=320x240:rate=10 -t 2 -c:v libvpx-vp9 -deadline realtime -cpu-used 8 m47/vp9.mp4
   expect "M4-7 vp9" "$(drop MP4 m47/vp9.mp4)" "Skipped 1 of 1: codec not supported"
   want+="vp9.mp4 "
 else
