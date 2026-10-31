@@ -2,7 +2,7 @@
 
 A local-first Mac file converter. Start dragging a file, tap Shift or Ctrl, and a radial wheel of formats pops up under the cursor. Drop on a format to convert. No uploads, no account.
 
-Status: M1 (drag gesture + wheel) and M2 (image conversion: PNG, JPEG, HEIC, WebP, TIFF; output lands next to the source as `name.ext`, then `name 2.ext`, never overwriting) work, and M3 adds PDF (images to one combined PDF, PDF pages to images) and a Text slice (OCR or the PDF's text layer). See [docs/teardown.md](docs/teardown.md) for the reference app study and [docs/plan.md](docs/plan.md) for scope.
+Status: M1 (drag gesture + wheel) and M2 (image conversion: PNG, JPEG, HEIC, WebP, TIFF; output lands next to the source as `name.ext`, then `name 2.ext`, never overwriting) work, and M3 adds PDF (images to one combined PDF, PDF pages to images) and a Text slice (OCR or the PDF's text layer). M4 adds audio and video with a wheel per file type: video gets MP4 (H.264), HEVC, MOV, GIF (10 fps, 480 px, up to 30 s), M4A and WAV; audio gets M4A and WAV. The menu shows progress and a Cancel item. Everything uses macOS's own AVFoundation, so formats it can't decode (MKV, WebM, AVI, VP9) are skipped, and there's no MP3 output. See [docs/teardown.md](docs/teardown.md) for the reference app study and [docs/plan.md](docs/plan.md) for scope.
 
 ## Triggers
 

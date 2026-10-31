@@ -1,9 +1,30 @@
 import CoreGraphics
 import Foundation
+import UniformTypeIdentifiers
 
 /// Pure wheel geometry, kept free of AppKit so it can be unit-tested.
 public enum Geometry {
     public static let sliceNames = ["PNG", "JPEG", "HEIC", "WebP", "TIFF", "PDF", "Text"]
+    public static let videoSlices = AVTarget.allCases.map(\.rawValue)
+    public static let audioSlices = [AVTarget.m4a.rawValue, AVTarget.wav.rawValue]
+
+    /// The wheel for a drop: the first file's kind, from its extension only (no file reads on the drag path).
+    public static func slices(for urls: [URL]) -> [String] {
+        guard let ext = urls.first?.pathExtension, !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return sliceNames }
+        if type.conforms(to: .movie) { return videoSlices }
+        if type.conforms(to: .audio) { return audioSlices }
+        return sliceNames
+    }
+
+    /// VoiceOver label for slice `name` on the wheel showing `slices`.
+    public static func label(for name: String, in slices: [String]) -> String {
+        switch name {
+        case "Text": "Extract text"
+        case "GIF": "Make GIF"
+        case "M4A" where slices == videoSlices, "WAV" where slices == videoSlices: "Extract audio as \(name)"
+        default: "Convert to \(name)"
+        }
+    }
 
     /// Slice under `point`, or nil in the dead zone (`r < inner`) or outside the ring (`r > outer`).
     /// Angles run clockwise from 12 o'clock (y up); slice 0 is centred on the top.

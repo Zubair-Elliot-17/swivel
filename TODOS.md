@@ -68,10 +68,39 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **200 MP page-render/OCR clamp is high for memory** (`PDFRender.swift` renderSize): ~800 MB a page with 4 in flight; consider 50 MP.
 - **M3 file names logged `.public`** (PDFMaker/PDFRender/TextExtract/main.swift), and failure details carry paths: switch to `.private`.
 - **Copy-restricted PDFs still give text** (allowsCopying false): deliberate, the user owns the file.
-- **No cancel for slow PDFs**: a 100-page OCR runs to the end.
+- **No cancel for slow PDFs**: a 100-page OCR runs to the end. M4 "Cancel conversions" stops batches between sources only; OCR still doesn't stop between pages.
 - **isPDF uses the file extension**: a real PDF without .pdf is skipped, a fake .pdf fails.
 - **OCR orientation (M25) and `.accurate` (M26) are unpinned by tests.**
 - **Partly drawn source path untested** (`PDFMaker.swift` catch where drawn > 0): no fixture makes ImageIO size a frame but fail to decode it; needs a decode seam.
 - **Temp PDF left behind if CGContext creation fails** (`PDFMaker.swift:39-41`): `temp` is set before the context check, so a later source's temp replaces it and the first empty `.swivel-*.pdf` stays; remove `file` before throwing.
 - **No `makePDF` read-only-folder test**: reading says "no permission"; add `readOnlyFolderReportsTheWriteError` for `makePDF`.
 - **Placeholder swap race** (`Converter.swift:166-167`): `rename(2)` replaces whatever sits at the claimed name; a process swapping our empty placeholder in that window gets overwritten (accepted for exFAT support).
+
+## M4 audio + video
+- **Vision OCR can starve the cooperative pool** (`TextExtract.swift` recognize): `perform` blocks a pool thread on a semaphore; with ~8 OCR tests in flight, one more blocking job (M4's first WAV reader) deadlocked the test run. M4 moved its own blocking reads to a private queue; move Vision (and the M2 ImageIO work) off the pool too.
+- **macOS 14 cancel path unverified**: there `export(to:as:)` runs Apple's back-deployed body (`guard status != .cancelled`); M4 never enters it in a cancelled task, but only a 14 machine can confirm (QA M4-M5).
+- **`status` / `progress` on AVAssetExportSession are deprecated at macOS 15**: fine at the 14 target; switch to `states(updateInterval:)` when the target moves.
+- **Temp folder kept if it can't be removed in 2 s** (`AVConvert.swift` removeLate): logged as an error, never seen in tests.
+- **Progress index uses `firstIndex(of:)`** (`main.swift` drop): a URL dropped twice reports the first position.
+- **"already MP4" ignores the audio codec**: an `avc1` `.mp4` with ALAC audio is skipped, not re-encoded to AAC.
+- **Image and OCR jobs already running when cancelled finish their file**; the outcome says so (converted).
+- **GIF is built in memory**: ~17 MB worst case at the caps (noise test in research); stream to a temp file if caps grow.
+
+## M4 review (P3)
+- **No cap on concurrent drops** (`main.swift` drop): each drop starts its own batch; AV batches then share one media engine. Queue or cap them.
+- **No "Cancelling…" feedback**: after Cancel conversions the line keeps the last progress until each batch stops; show "Cancelling…" and disable the item.
+- **Failed temp removal not logged on success** (`AVConvert.swift` viaTemp): `try?` drops the error after a claim; log it like removeLate does.
+- **Untested: disk full and the same source dropped twice at once**: needs a small disk image fixture and two overlapping convertAV calls on one file.
+- **`show(at:)` keeps the previous slice set until draggingEntered** (`WheelPanel.swift`): a wheel shown for a new drag briefly draws the last drag's slices.
+
+## M4 fix re-check (P3)
+- **GIF frame times round the track start to 1/600 s** (`AVRender.swift` makeGIF): an edit list starting at e.g. 1001/30000 s asks for frame 0 just before the track; keep the probe's CMTime start.
+- **Cancel ignored for an export stuck in `.unknown`** (`AVConvert.swift` run): after the 10 s wait, keep polling until it starts, then cancelExport; today it runs to the end and is discarded.
+- **App-layer fixes untested** (`main.swift` lineOwner, progress dedupe): move into a small testable type or keep to manual QA.
+- **qa.sh m46r setup can end the run without a FAIL line** (`scripts/qa.sh` ~138): add `|| { echo "FAIL setup: m46r fixtures"; exit 1; }`.
+- **qa.sh `afinfo | grep -q` can SIGPIPE under pipefail** (`scripts/qa.sh` ~141): use `grep -q … <<<"$(afinfo …)"`.
+
+## Hub fix re-check (P3)
+- **Right-click in the click-mode hub doesn't dismiss** (`WheelPanel.swift` WheelView): the hub is now ours, so the global right-click monitor never sees it; add `rightMouseDown` → `onDismiss` in click mode.
+- **Hub pass-through has no automated test**: it happens in WindowServer; keep "drop in the wheel centre, file stays put" as a manual QA row.
+- **Wheel can't be driven by scripted QA**: manual rows were run with synthetic CGEvent drags + AX presses (scratchpad tools); worth turning into `scripts/qa-ui.sh` if UI rows keep growing.

@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 /// Result of converting one dropped file.
@@ -11,11 +12,13 @@ public enum Outcome: Equatable, Sendable {
 
 /// Short menu text for a failure: common write errors by name, anything else cut to 60 characters.
 public func menuReason(for error: Error) -> String {
+    if error is CancellationError { return "cancelled" }
     let ns = error as NSError
     switch (ns.domain, ns.code) {
     case (NSCocoaErrorDomain, CocoaError.fileWriteNoPermission.rawValue), (NSPOSIXErrorDomain, Int(EACCES)):
         return "no permission"
-    case (NSCocoaErrorDomain, CocoaError.fileWriteOutOfSpace.rawValue), (NSPOSIXErrorDomain, Int(ENOSPC)):
+    case (NSCocoaErrorDomain, CocoaError.fileWriteOutOfSpace.rawValue), (NSPOSIXErrorDomain, Int(ENOSPC)),
+         (AVFoundationErrorDomain, AVError.diskFull.rawValue):
         return "disk full"
     case (NSCocoaErrorDomain, CocoaError.fileWriteVolumeReadOnly.rawValue), (NSPOSIXErrorDomain, Int(EROFS)):
         return "read-only volume"
@@ -23,6 +26,13 @@ public func menuReason(for error: Error) -> String {
         let text = ns.localizedDescription
         return text.count > 60 ? text.prefix(59) + "…" : text
     }
+}
+
+/// Menu text while a batch runs, e.g. "Converting clip.mov 42% (2 of 5)"; the fraction is clamped and NaN reads 0%.
+public func progressLine(name: String, fraction: Double, index: Int, total: Int) -> String {
+    let f = fraction.isNaN ? 0 : min(max(fraction, 0), 1)
+    let percent = Int(exactly: (f * 100).rounded(.down)) ?? 0
+    return "Converting \(name) \(percent)% (\(index) of \(total))"
 }
 
 /// One-line menu text for a batch; names files only, never full paths.

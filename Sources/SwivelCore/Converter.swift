@@ -31,10 +31,10 @@ public enum Converter {
         }
     }
 
-    /// A file that exists but won't open (no read permission) isn't "not an image"; folders stay .notImage.
+    /// A file that exists but won't open (no read permission) isn't "not an image" or "not supported"; folders keep the reason.
     static func skipped(_ source: URL, _ reason: SkipReason) -> Outcome {
         var isDir: ObjCBool = false
-        let unreadable = reason == .notImage && FileManager.default.fileExists(atPath: source.path, isDirectory: &isDir)
+        let unreadable = (reason == .notImage || reason == .notSupported) && FileManager.default.fileExists(atPath: source.path, isDirectory: &isDir)
             && !isDir.boolValue && !FileManager.default.isReadableFile(atPath: source.path)
         return .skipped(source: source, unreadable ? .unreadable : reason)
     }
@@ -50,8 +50,10 @@ public enum Converter {
     }
 
     /// Runs `job` per URL with at most `maxInFlight` at once; keeps input order.
+    /// Once cancelled, jobs not yet started fail "cancelled"; running ones finish or stop on their own.
     static func window(_ urls: [URL], maxInFlight: Int, job: @escaping @Sendable (URL) async -> Outcome) async -> [Outcome] {
-        await withTaskGroup(of: (Int, Outcome).self) { group in
+        let job: @Sendable (URL) async -> Outcome = { Task.isCancelled ? .failed(source: $0, reason: "cancelled") : await job($0) }
+        return await withTaskGroup(of: (Int, Outcome).self) { group in
             var results = [Outcome?](repeating: nil, count: urls.count)
             var next = 0
             // Sliding window: seed the cap, then start one more as each finishes.

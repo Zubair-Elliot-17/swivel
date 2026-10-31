@@ -11,10 +11,10 @@ private func point(_ degrees: Double, radius: Double = 70) -> CGPoint {
     return CGPoint(x: center.x + radius * sin(rad), y: center.y + radius * cos(rad))
 }
 
-private let count = Geometry.sliceNames.count
-private let width = 360 / Double(count)
+/// Image (7), video (6) and audio (2) wheels.
+private let counts = [7, 6, 2]
 
-private func slice(_ p: CGPoint, count: Int = count) -> Int? {
+private func slice(_ p: CGPoint, count: Int = 7) -> Int? {
     Geometry.slice(at: p, center: center, inner: 30, outer: 110, count: count)
 }
 
@@ -22,18 +22,19 @@ private func slice(_ p: CGPoint, count: Int = count) -> Int? {
     #expect(Geometry.sliceNames == ["PNG", "JPEG", "HEIC", "WebP", "TIFF", "PDF", "Text"])
 }
 
-@Test(arguments: Geometry.sliceNames.indices)
-func sliceCentres(index: Int) {
-    #expect(slice(point(Double(index) * width)) == index)
+@Test(arguments: counts)
+func sliceCentres(count: Int) {
+    let width = 360 / Double(count)
+    for index in 0..<count { #expect(slice(point(Double(index) * width), count: count) == index) }
 }
 
-private let wrapCases: [(Double, Int)] = [
-    (359, 0), (1, 0), (360 - width / 2 - 1, count - 1), (360 - width / 2 + 1, 0), (width / 2 - 1, 0),
-]
-
-@Test(arguments: wrapCases)
-func wrapAroundTop(degrees: Double, expected: Int) {
-    #expect(slice(point(degrees)) == expected)
+@Test(arguments: counts)
+func wrapAroundTop(count: Int) {
+    let width = 360 / Double(count)
+    let cases: [(Double, Int)] = [
+        (359, 0), (1, 0), (360 - width / 2 - 1, count - 1), (360 - width / 2 + 1, 0), (width / 2 - 1, 0),
+    ]
+    for (degrees, expected) in cases { #expect(slice(point(degrees), count: count) == expected) }
 }
 
 // With 2 slices, 90° and 270° are exactly representable boundaries; they pin the tie rule.
@@ -43,11 +44,48 @@ func wrapAroundTop(degrees: Double, expected: Int) {
 }
 
 // sin/cos round-off moves an exact boundary point off the line, so test each side of every boundary.
-@Test(arguments: Geometry.sliceNames.indices)
-func everyBoundarySplitsNeighbours(before: Int) {
-    let degrees = (Double(before) + 0.5) * width
-    #expect(slice(point(degrees - 1e-6)) == before)
-    #expect(slice(point(degrees + 1e-6)) == (before + 1) % count)
+@Test(arguments: counts)
+func everyBoundarySplitsNeighbours(count: Int) {
+    let width = 360 / Double(count)
+    for before in 0..<count {
+        let degrees = (Double(before) + 0.5) * width
+        #expect(slice(point(degrees - 1e-6), count: count) == before)
+        #expect(slice(point(degrees + 1e-6), count: count) == (before + 1) % count)
+    }
+}
+
+// MARK: Slice sets (extension only: these paths don't exist)
+
+private func f(_ name: String) -> URL { URL(fileURLWithPath: "/nonexistent/swivel/\(name)") }
+
+@Test(arguments: [[], ["a.png"], ["doc.pdf"], ["folder"], ["notes.txt"], ["a.png", "clip.mov"], ["x.unknownext"]])
+func imageSetForNonAVDrops(names: [String]) {
+    #expect(Geometry.slices(for: names.map(f)) == Geometry.sliceNames)
+}
+
+@Test(arguments: ["clip.mov", "clip.mp4", "clip.m4v", "clip.mkv", "clip.avi", "CLIP.MOV"])
+func videoSetForMovies(name: String) {
+    #expect(Geometry.slices(for: [f(name)]) == ["MP4", "HEVC", "MOV", "GIF", "M4A", "WAV"])
+}
+
+@Test(arguments: ["a.m4a", "a.wav", "a.mp3", "a.aiff", "a.flac"])
+func audioSetForAudio(name: String) {
+    #expect(Geometry.slices(for: [f(name)]) == ["M4A", "WAV"])
+}
+
+@Test func mixedDropTakesTheFirstFilesSet() {
+    #expect(Geometry.slices(for: [f("clip.mov"), f("a.png")]) == Geometry.videoSlices)
+    #expect(Geometry.slices(for: [f("a.m4a"), f("clip.mov")]) == Geometry.audioSlices)
+}
+
+@Test func voiceOverLabelsPerSet() {
+    #expect(Geometry.videoSlices.map { Geometry.label(for: $0, in: Geometry.videoSlices) } == [
+        "Convert to MP4", "Convert to HEVC", "Convert to MOV", "Make GIF", "Extract audio as M4A", "Extract audio as WAV",
+    ])
+    #expect(Geometry.audioSlices.map { Geometry.label(for: $0, in: Geometry.audioSlices) } == ["Convert to M4A", "Convert to WAV"])
+    #expect(Geometry.sliceNames.map { Geometry.label(for: $0, in: Geometry.sliceNames) } == [
+        "Convert to PNG", "Convert to JPEG", "Convert to HEIC", "Convert to WebP", "Convert to TIFF", "Convert to PDF", "Extract text",
+    ])
 }
 
 @Test(arguments: [0.0, 10, 29.9])

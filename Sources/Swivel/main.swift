@@ -1,4 +1,5 @@
 import AppKit
+import os
 import SwivelCore
 
 @MainActor
@@ -7,16 +8,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let dragLine = NSMenuItem(title: "Drag: idle", action: nil, keyEquivalent: "")
     private let lastDropLine = NSMenuItem(title: "Last: none", action: nil, keyEquivalent: "")
     private let revealItem = NSMenuItem(title: "Reveal in Finder", action: #selector(reveal), keyEquivalent: "")
+    private let cancelItem = NSMenuItem(title: "Cancel conversions", action: #selector(cancelConversions), keyEquivalent: "")
     private let tapLine = NSMenuItem(title: TapStatus.needsAccess.menuLine, action: nil, keyEquivalent: "")
     private let enableTapItem = NSMenuItem(title: "Enable Shift-tap in Finder…", action: #selector(enableTap), keyEquivalent: "")
     private var dragMonitor: DragMonitor?
     private var finderTap: FinderTap?
     private var revealTargets: [URL] = []
     private var busy = 0  // batches in flight; overlapping drops keep the icon busy until all finish
+    private var drops: [UUID: Task<Void, Never>] = [:]  // running batches, for Cancel conversions
+    private var lineOwner: UUID?  // the newest drop; only it writes the Last line and Reveal
     private var qaMode = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        cancelItem.target = self
         updateIcon()
 
         let menu = NSMenu()
@@ -26,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         revealItem.target = self
         revealItem.isEnabled = false
         menu.addItem(revealItem)
+        menu.addItem(cancelItem)
         menu.addItem(.separator())
         menu.addItem(tapLine)
         enableTapItem.target = self
@@ -72,25 +78,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func drop(_ name: String, _ urls: [URL]) {
         let paths = urls.map(\.path)
         log.info("drop slice=\(name, privacy: .public) urls=\(paths.joined(separator: ", "), privacy: .public)")
+        let id = UUID()
         let job: @Sendable () async -> [Outcome]
-        switch (ImageFormat(rawValue: name), name) {
-        case (let format?, _): job = { await Converter.convertBatch(urls, to: format) }
-        case (nil, "PDF"): job = { await Converter.makePDF(urls) }
-        case (nil, "Text"): job = { await Converter.textBatch(urls) }
+        switch (ImageFormat(rawValue: name), AVTarget(rawValue: name), name) {
+        case (let format?, _, _): job = { await Converter.convertBatch(urls, to: format) }
+        case (nil, let target?, _):
+            let shown = OSAllocatedUnfairLock(initialState: "")  // last line posted, so only a new whole percent hops to main
+            job = { [weak self] in
+                await Converter.avBatch(urls, to: target) { url, fraction in
+                    let index = (urls.firstIndex(of: url) ?? 0) + 1
+                    let line = progressLine(name: url.lastPathComponent, fraction: fraction, index: index, total: urls.count)
+                    guard shown.withLock({ last in
+                        if last == line { return false }
+                        last = line
+                        return true
+                    }) else { return }
+                    Task { @MainActor in self?.showProgress(line, for: id) }
+                }
+            }
+        case (nil, nil, "PDF"): job = { await Converter.makePDF(urls) }
+        case (nil, nil, "Text"): job = { await Converter.textBatch(urls) }
         default:
             log.info("drop on unknown slice \(name, privacy: .public)")
             return
         }
         busy += 1
         updateIcon()
-        Task { @MainActor in
+        lineOwner = id
+        drops[id] = Task { @MainActor in
             let outcomes = await job()
+            drops[id] = nil  // before the summary, so a late progress hop can't overwrite it
             for outcome in outcomes { logOutcome(outcome) }
-            // The batch that finishes last owns the line and Reveal.
             let summary = BatchSummary(outcomes)
-            lastDropLine.title = summary.menuLine
-            revealTargets = summary.outputs
-            revealItem.isEnabled = !revealTargets.isEmpty
+            if lineOwner == id {
+                lastDropLine.title = summary.menuLine
+                revealTargets = summary.outputs
+                revealItem.isEnabled = !revealTargets.isEmpty
+            }
             busy -= 1
             updateIcon()
             if qaMode {
@@ -98,6 +122,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
             }
         }
+    }
+
+    /// Progress from the owning batch while it runs; once finished it keeps its summary.
+    private func showProgress(_ line: String, for id: UUID) {
+        if lineOwner == id, drops[id] != nil { lastDropLine.title = line }
+    }
+
+    @objc private func cancelConversions() {
+        for task in drops.values { task.cancel() }
     }
 
     private func logOutcome(_ outcome: Outcome) {
@@ -113,6 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateIcon() {
+        cancelItem.isEnabled = busy > 0
         statusItem.button?.image = busy > 0
             ? NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "Swivel, converting")
             : NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Swivel")
