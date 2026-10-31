@@ -132,6 +132,11 @@ fresh m46 voice.m4a
 expect M4-6 "$(drop WAV m46/voice.m4a)" "Last: voice.wav (1 of 1)"
 fmt=$(afinfo m46/voice.wav | grep 'Data format')
 [[ "$fmt" =~ ([0-9]+)\ ch.*Int16 ]] && [ "${BASH_REMATCH[1]}" -le 2 ] && pass "M4-6 format" || fail "M4-6 format" "$fmt"
+# Rates outside 8...192 kHz clamp instead of crashing (CAF, since a .wav source is already WAV).
+mkdir m46r && afconvert -f caff -d BEI16@5512 voice.aiff m46r/low.caf && afconvert -f caff -d LEI16@384000 voice.aiff m46r/high.caf
+expect "M4-6 5512 Hz" "$(drop WAV m46r/low.caf)" "Last: low.wav (1 of 1)"
+expect "M4-6 384 kHz" "$(drop WAV m46r/high.caf)" "Last: high.wav (1 of 1)"
+afinfo m46r/low.wav | grep -q ' 8000 Hz' && afinfo m46r/high.wav | grep -q ' 192000 Hz' && pass "M4-6 clamped rates" || fail "M4-6 clamped rates" "afinfo"
 
 # M4-7: skips and failures, nothing written.
 fresh m47 voice.mp4 mute.mov bad.mp4 long.mov

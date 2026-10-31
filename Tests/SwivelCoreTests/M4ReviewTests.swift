@@ -1,0 +1,42 @@
+import AVFoundation
+import Foundation
+import Testing
+@testable import SwivelCore
+
+// Regression tests for the M4 review fix round.
+
+// MARK: F1 WAV rate outside what AVFoundation accepts
+
+@Test func wavRateClampsToAVFoundationRange() {
+    #expect(wavFormat(rate: 1, channels: 1) == (8_000, 1))
+    #expect(wavFormat(rate: 5_512, channels: 1) == (8_000, 1))
+    #expect(wavFormat(rate: 384_000, channels: 1) == (192_000, 1))
+    #expect(wavFormat(rate: 1e9, channels: 1) == (192_000, 1))
+    #expect(wavFormat(rate: 8_000, channels: 1) == (8_000, 1))
+    #expect(wavFormat(rate: 192_000, channels: 1) == (192_000, 1))
+    // 1 h at 1 GHz would be over 4 GiB; at the clamped 192 kHz it is ~1.4 GB, so it fits.
+    var p = AVProbe()
+    (p.contentType, p.opened, p.playable, p.hasAudio, p.duration, p.audioRate, p.audioChannels) = (.mpeg4Audio, true, true, true, 3_600, 1e9, 1)
+    #expect(avDecision(p, .wav) == .encode)
+}
+
+// Rates outside 8...192 kHz once raised an uncatchable ObjC exception and left a .swivel-* folder.
+@Test(arguments: [(5_512.0, 8_000.0), (384_000, 192_000)])
+func extremeRateSourceConvertsToWAV(rate: Double, expected: Double) async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    // AVAudioFile clamps the rate itself, so afconvert writes the source.
+    let wav = try await AVFixture.write("tone.wav", in: dir, video: nil, seconds: 1, fileType: .wav)
+    let src = dir.appendingPathComponent("tone.caf")
+    let run = try Process.run(URL(fileURLWithPath: "/usr/bin/afconvert"), arguments: ["-f", "caff", "-d", "BEI16@\(Int(rate))", wav.path, src.path])
+    run.waitUntilExit()
+    #expect(run.terminationStatus == 0)
+    try FileManager.default.removeItem(at: wav)
+    let p = await Converter.probe(src)
+    #expect(p.audioRate == rate, "\(p)")
+    let outcome = await Converter.convertAV(src, to: .wav)
+    guard case .converted(_, let outputs) = outcome, let out = outputs.first else { Issue.record("\(outcome)"); return }
+    #expect(try await wavFormatOf(out).mSampleRate == expected)
+    #expect(abs(try await AVURLAsset(url: out).load(.duration).seconds - 1) < 0.05)
+    #expect(try files(in: dir) == ["tone.caf", "tone.wav"])
+}

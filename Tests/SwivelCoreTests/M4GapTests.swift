@@ -61,7 +61,7 @@ private func healthyMov(_ change: (inout AVProbe) -> Void = { _ in }) -> AVProbe
 }
 
 /// An audio file in a rate and channel count the shared fixture can't make; closed when the AVAudioFile goes out of scope.
-private func tone(_ url: URL, rate: Double, channels: AVAudioChannelCount, settings: [String: Any]) throws {
+func tone(_ url: URL, rate: Double, channels: AVAudioChannelCount, settings: [String: Any]) throws {
     let layout = AVAudioChannelLayout(layoutTag: channels == 6 ? kAudioChannelLayoutTag_MPEG_5_1_A : kAudioChannelLayoutTag_DiscreteInOrder | channels)!
     let format = AVAudioFormat(standardFormatWithSampleRate: rate, channelLayout: layout)
     var all = settings
@@ -78,7 +78,7 @@ private func tone(_ url: URL, rate: Double, channels: AVAudioChannelCount, setti
     try file.write(from: buffer)
 }
 
-private func wavFormatOf(_ url: URL) async throws -> AudioStreamBasicDescription {
+func wavFormatOf(_ url: URL) async throws -> AudioStreamBasicDescription {
     let track = try #require(try await AVURLAsset(url: url).loadTracks(withMediaType: .audio).first)
     let desc = try #require(try await track.load(.formatDescriptions).first)
     return try #require(CMAudioFormatDescriptionGetStreamBasicDescription(desc)?.pointee)

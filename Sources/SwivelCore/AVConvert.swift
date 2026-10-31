@@ -93,8 +93,9 @@ public func avDecision(_ p: AVProbe, _ t: AVTarget) -> AVDecision {
 }
 
 /// WAV output rate and channels from the file's values: a bad rate becomes 44.1 kHz, channels 1...2.
+/// AVFoundation raises an uncatchable exception for rates outside 8...192 kHz, so those clamp.
 func wavFormat(rate: Double, channels: UInt32) -> (rate: Double, channels: Int) {
-    (rate.isFinite && rate > 0 ? rate : 44_100, Int(clamping: min(max(channels, 1), 2)))
+    (rate.isFinite && rate > 0 ? min(max(rate, 8_000), 192_000) : 44_100, Int(clamping: min(max(channels, 1), 2)))
 }
 
 /// RIFF sizes are 32-bit, so 16-bit PCM at or over 4 GiB can't be written; computed in Double.
