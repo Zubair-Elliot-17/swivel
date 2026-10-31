@@ -85,3 +85,10 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **"already MP4" ignores the audio codec**: an `avc1` `.mp4` with ALAC audio is skipped, not re-encoded to AAC.
 - **Image and OCR jobs already running when cancelled finish their file**; the outcome says so (converted).
 - **GIF is built in memory**: ~17 MB worst case at the caps (noise test in research); stream to a temp file if caps grow.
+
+## M4 review (P3)
+- **No cap on concurrent drops** (`main.swift` drop): each drop starts its own batch; AV batches then share one media engine. Queue or cap them.
+- **No "Cancelling…" feedback**: after Cancel conversions the line keeps the last progress until each batch stops; show "Cancelling…" and disable the item.
+- **Failed temp removal not logged on success** (`AVConvert.swift` viaTemp): `try?` drops the error after a claim; log it like removeLate does.
+- **Untested: disk full and the same source dropped twice at once**: needs a small disk image fixture and two overlapping convertAV calls on one file.
+- **`show(at:)` keeps the previous slice set until draggingEntered** (`WheelPanel.swift`): a wheel shown for a new drag briefly draws the last drag's slices.
