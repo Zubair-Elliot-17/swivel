@@ -1,4 +1,5 @@
 import AppKit
+import os
 import SwivelCore
 
 @MainActor
@@ -82,10 +83,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch (ImageFormat(rawValue: name), AVTarget(rawValue: name), name) {
         case (let format?, _, _): job = { await Converter.convertBatch(urls, to: format) }
         case (nil, let target?, _):
+            let shown = OSAllocatedUnfairLock(initialState: "")  // last line posted, so only a new whole percent hops to main
             job = { [weak self] in
                 await Converter.avBatch(urls, to: target) { url, fraction in
                     let index = (urls.firstIndex(of: url) ?? 0) + 1
                     let line = progressLine(name: url.lastPathComponent, fraction: fraction, index: index, total: urls.count)
+                    guard shown.withLock({ last in
+                        if last == line { return false }
+                        last = line
+                        return true
+                    }) else { return }
                     Task { @MainActor in self?.showProgress(line, for: id) }
                 }
             }
