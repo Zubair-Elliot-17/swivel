@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds build/Swivel.app from the release binary and ad-hoc signs it.
+# Builds build/Swivel.app from the release binary and signs it ("Swivel Dev" if scripts/dev-cert.sh made it, else ad hoc).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 swift build -c release
@@ -22,5 +22,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
-codesign --force -s - "$APP"
-echo "Built $APP"
+# A stable identity keeps privacy grants across rebuilds; ad hoc changes every build.
+IDENTITY=-
+security find-identity -p codesigning | grep -q '"Swivel Dev"' && IDENTITY="Swivel Dev"
+codesign --force -s "$IDENTITY" "$APP"
+echo "Built $APP (signed: $IDENTITY)"
