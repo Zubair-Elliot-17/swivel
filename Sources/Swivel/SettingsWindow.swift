@@ -118,6 +118,7 @@ struct SettingsView: View {
                        in: QualitySetting.range) {
                     Text(quality, format: .percent.precision(.fractionLength(0)))
                 }
+                .accessibilityLabel("JPEG and HEIC quality")
             }
         }
         .frame(width: 340, height: 560)
