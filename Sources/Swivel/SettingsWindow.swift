@@ -19,13 +19,14 @@ final class SettingsWindow {
         return window
     }()
 
-    /// Fresh content from the store: the window outlives a close, and the store may have changed meanwhile.
-    func reload() {
+    /// Fresh content from the store when closed (it outlives a close; the store may have changed); an open one keeps scroll and focus.
+    func reloadIfClosed() {
+        guard !window.isVisible else { return }
         window.contentViewController = NSHostingController(rootView: SettingsView(defaults: defaults))
     }
 
     func show() {
-        reload()
+        reloadIfClosed()
         // An accessory app isn't active, so the window would open behind the frontmost app.
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)

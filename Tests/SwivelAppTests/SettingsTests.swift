@@ -76,13 +76,25 @@ import SwivelCore
 @MainActor @Test func reopenedSettingsShowTheCurrentStore() throws {
     withSuite { d in
         let settings = SettingsWindow(defaults: d)
-        settings.reload()
+        settings.reloadIfClosed()
         settings.window.contentView?.layoutSubtreeIfNeeded()
         d.set(["WAV", "MP4"], forKey: FileKind.video.key)
         d.set(0.6, forKey: QualitySetting.key)
-        settings.reload()
+        settings.reloadIfClosed()
         let view = (settings.window.contentViewController as? NSHostingController<SettingsView>)?.rootView
         #expect(view?.layouts[.video] == ["WAV", "MP4"])
         #expect(view?.quality == 0.6)
+    }
+}
+
+// Choosing Settings while it is already open only brings it forward (scroll and focus stay).
+@MainActor @Test func openSettingsAreNotRebuilt() {
+    withSuite { d in
+        let settings = SettingsWindow(defaults: d)
+        settings.window.orderFrontRegardless()
+        defer { settings.window.close() }
+        let shown = settings.window.contentViewController
+        settings.reloadIfClosed()
+        #expect(settings.window.contentViewController === shown)
     }
 }
