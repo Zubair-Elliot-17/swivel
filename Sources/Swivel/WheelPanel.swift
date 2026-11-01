@@ -42,7 +42,7 @@ final class WheelPanel {
     /// Opens the wheel at `point` for `urls` already chosen (Finder selection); a click picks the slice.
     func showForClick(at point: NSPoint, urls: [URL]) {
         hide()
-        view.slices = Geometry.slices(for: urls)
+        view.slices = Geometry.slices(for: Geometry.kind(for: urls), defaults: .standard)
         view.clickURLs = urls
         place(at: point)
         // Finder keeps the keys, so arrows or typing would change its selection under the wheel: hide on any keyDown (not under VoiceOver).
@@ -129,7 +129,7 @@ final class WheelView: NSView {
         slices.indices.map { i in
             let c = labelCenter(i)
             return SliceElement(
-                label: Geometry.label(for: slices[i], in: slices), frame: NSRect(x: c.x - 22, y: c.y - 12, width: 44, height: 24),
+                label: Geometry.label(for: slices[i], kind: slices.contains("MP4") ? .video : slices.contains("PNG") ? .image : .audio), frame: NSRect(x: c.x - 22, y: c.y - 12, width: 44, height: 24),
                 parent: self, press: { [weak self] in self?.pick(i) })
         }
     }
@@ -192,7 +192,7 @@ final class WheelView: NSView {
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         // The wheel opens under the pointer, so this comes at once; the set stays fixed for the show (Q3).
-        if clickURLs == nil { slices = Geometry.slices(for: fileURLs(sender)) }
+        if clickURLs == nil { slices = Geometry.slices(for: Geometry.kind(for: fileURLs(sender)), defaults: .standard) }
         return draggingUpdated(sender)
     }
 
