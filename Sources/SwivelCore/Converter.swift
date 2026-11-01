@@ -103,15 +103,21 @@ public enum Converter {
         let data = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(data as CFMutableData, target.utType.identifier as CFString, 1, nil)
         else { throw ConvertError("can't write \(target.rawValue)") }
-        let options: [CFString: Any] = switch target {
-        case .jpeg, .heic: [kCGImageDestinationLossyCompressionQuality: quality]
+        add(dest, imageIOOptions(target, quality: quality) as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else { throw ConvertError("couldn't encode \(target.rawValue)") }
+        return data as Data
+    }
+
+    /// ImageIO write options for `target`.
+    static func imageIOOptions(_ target: ImageFormat, quality: Double) -> [CFString: Any] {
+        switch target {
+        case .jpeg: [kCGImageDestinationLossyCompressionQuality: quality]
+        // HEIC at 1.0 fails ("couldn't encode HEIC") while AV encodes run; 0.99 never did.
+        case .heic: [kCGImageDestinationLossyCompressionQuality: min(quality, 0.99)]
         // LZW (5): uncompressed, a blank 2000 px page is 12 MB.
         case .tiff: [kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFCompression: 5]]
         default: [:]
         }
-        add(dest, options as CFDictionary)
-        guard CGImageDestinationFinalize(dest) else { throw ConvertError("couldn't encode \(target.rawValue)") }
-        return data as Data
     }
 
     /// Pixel size of frame `index`, refusing unreadable sizes and anything over the 200 MP cap.

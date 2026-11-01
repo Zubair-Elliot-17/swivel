@@ -86,6 +86,17 @@ func lossySizeFollowsQuality(target: ImageFormat) async throws {
     if target == .jpeg { #expect(try await output(target, quality: 0.85).count == standard) }
 }
 
+// Amendment: HEIC at 1.0 fails while AV encodes run, so HEIC caps at 0.99; JPEG keeps 1.0.
+@Test func heicQualityCapsAtNinetyNine() {
+    let setting = { (target: ImageFormat, q: Double) in
+        Converter.imageIOOptions(target, quality: q)[kCGImageDestinationLossyCompressionQuality] as? Double
+    }
+    #expect(setting(.heic, 1.0) == 0.99)
+    #expect(setting(.heic, 0.99) == 0.99)
+    #expect(setting(.heic, 0.85) == 0.85)
+    #expect(setting(.jpeg, 1.0) == 1.0)
+}
+
 @Test(arguments: [ImageFormat.png, .tiff, .webp])
 func losslessAndWebPIgnoreQuality(target: ImageFormat) async throws {
     let jpeg: (URL) throws -> URL = { try write(.jpeg, in: $0) }

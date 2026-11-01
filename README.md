@@ -16,7 +16,7 @@ The Finder tap reads the selection through Apple events, so it needs Automation 
 Choose **Settings…** in the menu bar menu (⌘, also opens it once Swivel is the active app; ⌘W closes it).
 
 - **Wheel layouts:** Images, Video and Audio each list their slices. Drag rows to reorder, switch a row off to hide it from that wheel (one always stays on), or press **Reset** for the default list. The next wheel, and the VoiceOver labels on it, follow your list. A hidden slice switched back on goes to the end.
-- **Quality:** one slider (50-100%, default 85%) for JPEG and HEIC output, including PDF pages saved as JPEG or HEIC. PNG, TIFF and WebP ignore it, and the JPEG pages Swivel puts inside a combined PDF always use 85%.
+- **Quality:** one slider (50-100%, default 85%) for JPEG and HEIC output, including PDF pages saved as JPEG or HEIC. HEIC tops out at 99% (macOS's HEIC encoder can fail at 100% while a video conversion runs). PNG, TIFF and WebP ignore it, and the JPEG pages Swivel puts inside a combined PDF always use 85%.
 - Settings live in `dev.zubair.swivel` (`wheel.image`, `wheel.video`, `wheel.audio`, `quality`). Values are checked on every read: unknown names, duplicates, an empty list or a wrong type fall back to the default wheel, and quality is clamped to 0.5-1.0 (anything not a number means 0.85). Reset deletes the key, so a kind you never changed picks up new default slices in later versions; a saved layout keeps exactly the slices it lists, so a slice added to the defaults later stays hidden there until you Reset or switch it on.
 
 ## Open at Login
