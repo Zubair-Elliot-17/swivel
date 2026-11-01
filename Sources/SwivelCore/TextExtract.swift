@@ -29,7 +29,7 @@ extension Converter {
                             logBudget(source, skipped: min(doc.pageCount, maxPages) - i, max: maxPixels)
                             break
                         }
-                        pageText = try recognize(try render(page, dpi: 300), orientation: .up)
+                        pageText = try await recognize(try render(page, dpi: 300), orientation: .up)
                     }
                     pages.append(pageText.trimmingCharacters(in: .whitespacesAndNewlines))
                 }
@@ -46,7 +46,7 @@ extension Converter {
                 guard let image = CGImageSourceCreateImageAtIndex(src, index, nil) else { throw ConvertError("couldn't read image") }
                 let props = CGImageSourceCopyPropertiesAtIndex(src, index, nil) as? [CFString: Any]
                 let orientation = (props?[kCGImagePropertyOrientation] as? UInt32).flatMap(CGImagePropertyOrientation.init) ?? .up
-                text = try recognize(image, orientation: orientation)
+                text = try await recognize(image, orientation: orientation)
             }
             guard hasText(text) else { return .skipped(source: source, .noText) }
             return .converted(source: source, outputs: [try claim(Data(text.utf8), source: source, ext: "txt")])
@@ -64,8 +64,15 @@ extension Converter {
         text.contains { !$0.isWhitespace }
     }
 
+    /// OCR on a GCD thread: a blocking perform on the cooperative pool deadlocked the full test run under load.
+    private static func recognize(_ image: CGImage, orientation: CGImagePropertyOrientation) async throws -> String {
+        try await withCheckedThrowingContinuation { done in
+            DispatchQueue.global(qos: .userInitiated).async { done.resume(with: Result { try recognizeNow(image, orientation: orientation) }) }
+        }
+    }
+
     /// Vision OCR, one line per observation; the request never leaves this call (not Sendable).
-    private static func recognize(_ image: CGImage, orientation: CGImagePropertyOrientation) throws -> String {
+    private static func recognizeNow(_ image: CGImage, orientation: CGImagePropertyOrientation) throws -> String {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.revision = VNRecognizeTextRequestRevision3
