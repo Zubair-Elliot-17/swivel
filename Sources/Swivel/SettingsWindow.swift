@@ -19,7 +19,13 @@ final class SettingsWindow {
         return window
     }()
 
+    /// Fresh content from the store: the window outlives a close, and the store may have changed meanwhile.
+    func reload() {
+        window.contentViewController = NSHostingController(rootView: SettingsView(defaults: defaults))
+    }
+
     func show() {
+        reload()
         // An accessory app isn't active, so the window would open behind the frontmost app.
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
@@ -71,10 +77,10 @@ enum QualitySetting {
     static func write(_ value: Double, to defaults: UserDefaults) { defaults.set(Converter.quality(value), forKey: key) }
 }
 
-private struct SettingsView: View {
+struct SettingsView: View {
     let defaults: UserDefaults
-    @State private var layouts: [FileKind: [String]]
-    @State private var quality: Double
+    @State var layouts: [FileKind: [String]]
+    @State var quality: Double
 
     init(defaults: UserDefaults) {
         self.defaults = defaults

@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import Testing
 import SwivelCore
 @testable import Swivel
@@ -68,5 +69,20 @@ import SwivelCore
         QualitySetting.write(7, to: d)
         #expect(d.object(forKey: "quality") as? Double == 1)
         #expect(QualitySetting.range == 0.5...1)
+    }
+}
+
+// F1: the window outlives a close, so each open must re-read the store, or a toggle saves over newer values.
+@MainActor @Test func reopenedSettingsShowTheCurrentStore() throws {
+    withSuite { d in
+        let settings = SettingsWindow(defaults: d)
+        settings.reload()
+        settings.window.contentView?.layoutSubtreeIfNeeded()
+        d.set(["WAV", "MP4"], forKey: FileKind.video.key)
+        d.set(0.6, forKey: QualitySetting.key)
+        settings.reload()
+        let view = (settings.window.contentViewController as? NSHostingController<SettingsView>)?.rootView
+        #expect(view?.layouts[.video] == ["WAV", "MP4"])
+        #expect(view?.quality == 0.6)
     }
 }
