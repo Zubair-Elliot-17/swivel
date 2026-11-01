@@ -77,7 +77,7 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **Placeholder swap race** (`Converter.swift:166-167`): `rename(2)` replaces whatever sits at the claimed name; a process swapping our empty placeholder in that window gets overwritten (accepted for exFAT support).
 
 ## M4 audio + video
-- **Vision OCR can starve the cooperative pool** (`TextExtract.swift` recognize): `perform` blocks a pool thread on a semaphore; with ~8 OCR tests in flight, one more blocking job (M4's first WAV reader) deadlocked the test run. M4 moved its own blocking reads to a private queue; move Vision (and the M2 ImageIO work) off the pool too.
+- ~~**Vision OCR can starve the cooperative pool**~~ Done in M5: Vision runs on a GCD thread (the full test run deadlocked once the M5 quality tests added HEIC encodes). The ImageIO work is still on the pool (see M5 polish).
 - **macOS 14 cancel path unverified**: there `export(to:as:)` runs Apple's back-deployed body (`guard status != .cancelled`); M4 never enters it in a cancelled task, but only a 14 machine can confirm (QA M4-M5).
 - **`status` / `progress` on AVAssetExportSession are deprecated at macOS 15**: fine at the 14 target; switch to `states(updateInterval:)` when the target moves.
 - **Temp folder kept if it can't be removed in 2 s** (`AVConvert.swift` removeLate): logged as an error, never seen in tests.
@@ -104,3 +104,13 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **Right-click in the click-mode hub doesn't dismiss** (`WheelPanel.swift` WheelView): the hub is now ours, so the global right-click monitor never sees it; add `rightMouseDown` → `onDismiss` in click mode.
 - **Hub pass-through has no automated test**: it happens in WindowServer; keep "drop in the wheel centre, file stays put" as a manual QA row.
 - **Wheel can't be driven by scripted QA**: manual rows were run with synthetic CGEvent drags + AX presses (scratchpad tools); worth turning into `scripts/qa-ui.sh` if UI rows keep growing.
+
+## M5 polish (P3)
+- **ImageIO HEIC/JPEG encodes still block the cooperative pool** (`Converter.convert`): the HEVC encoder waits on a semaphore; with the pool full of blocking work it was half of the M5 test deadlock. Hop to a GCD queue like OCR now does.
+- **HEIC bytes vary run to run** (hardware or software encoder): `lossySizeFollowsQuality` asserts only the size order for HEIC, byte equality for JPEG.
+- **`activate(ignoringOtherApps:)` is API_TO_BE_DEPRECATED** (`SettingsWindow.show`): no warning today; a later SDK may warn and break the 0-warning gate. Switch to `NSApp.activate()` (macOS 14+) then.
+- **Settings window doesn't reload on outside changes**: a `defaults write` while it is open shows the old list until the next launch; the wheel reads fresh on every show.
+- **Stored layouts hide future default slices** (OV6): a saved list keeps only its names; README says so. Consider storing hidden names instead if new slices are added.
+- **Settings toggles are labelled by format name only** ("PNG"): VoiceOver reads "PNG, switch"; consider "Show PNG on the Images wheel".
+- **Open at Login, `.requiresApproval` and next-login launch are manual-only** (QA M5-M1, M5-M2), and macOS 14 is unverified (M5-M3).
+- **`SWIVEL_QA=1` alone switches settings to the QA suite** (`AppDefaults`), even without `--qa-drop`: intended for scripted runs, noted so nobody sets it in a login shell.
