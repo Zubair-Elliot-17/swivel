@@ -4,7 +4,9 @@ import PDFKit
 
 extension Converter {
     /// One image per page at 150 dpi, at most `maxPages` and `maxPixels` in all. The document never leaves this call (PDFKit isn't Sendable).
-    static func renderPDF(_ source: URL, to target: ImageFormat, maxPages: Int = 100, maxPixels: Int = pixelBudget) -> Outcome {
+    static func renderPDF(
+        _ source: URL, to target: ImageFormat, quality: Double, maxPages: Int = 100, maxPixels: Int = pixelBudget
+    ) -> Outcome {
         let doc: PDFDocument
         switch openPDF(source) {
         case .success(let opened): doc = opened
@@ -23,7 +25,7 @@ extension Converter {
                     if outputs.isEmpty { return .skipped(source: source, .pageLimit) }
                     break
                 }
-                let data = try encode(try render(page, dpi: 150), to: target)
+                let data = try encode(try render(page, dpi: 150), to: target, quality: quality)
                 let number = String(i + 1)
                 let suffix = count == 1 ? "" : " page " + String(repeating: "0", count: String(count).count - number.count) + number
                 outputs.append(try claim(data, source: source, ext: target.fileExtension, suffix: suffix))

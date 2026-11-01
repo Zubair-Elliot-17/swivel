@@ -14,9 +14,18 @@ struct ConvertError: LocalizedError {
 
 /// Converts dropped files off the main actor; outputs go next to the source and never overwrite.
 public enum Converter {
-    /// Never throws: skips and errors come back as an `Outcome`.
-    public static func convert(_ source: URL, to target: ImageFormat) async -> Outcome {
-        if isPDF(source) { return renderPDF(source, to: target) }
+    /// JPEG/HEIC quality when the setting is absent or not a number.
+    public static let defaultQuality = 0.85
+
+    /// The stored quality setting, cleaned: a number clamps to 0.5...1; absent, NaN or any other type is the default.
+    public static func quality(_ raw: Any?) -> Double {
+        guard let value = (raw as? NSNumber)?.doubleValue, !value.isNaN else { return defaultQuality }
+        return min(max(value, 0.5), 1)
+    }
+
+    /// Never throws: skips and errors come back as an `Outcome`. `quality` applies to JPEG and HEIC output.
+    public static func convert(_ source: URL, to target: ImageFormat, quality: Double = defaultQuality) async -> Outcome {
+        if isPDF(source) { return renderPDF(source, to: target, quality: quality) }
         let src = CGImageSourceCreateWithURL(source as CFURL, nil)
         let type = src.flatMap(CGImageSourceGetType).flatMap { UTType($0 as String) }
         let count = src.map(CGImageSourceGetCount) ?? 0
@@ -24,7 +33,7 @@ public enum Converter {
             return skipped(source, reason)
         }
         do {
-            let data = try encode(src!, to: target)
+            let data = try encode(src!, to: target, quality: quality)
             return .converted(source: source, outputs: [try claim(data, source: source, ext: target.fileExtension)])
         } catch {
             return failed(source, error)
@@ -45,8 +54,10 @@ public enum Converter {
     }
 
     /// Converts `urls` with at most `maxInFlight` decodes at once (each holds a full bitmap); keeps input order.
-    public static func convertBatch(_ urls: [URL], to target: ImageFormat, maxInFlight: Int = 4) async -> [Outcome] {
-        await window(urls, maxInFlight: maxInFlight) { await convert($0, to: target) }
+    public static func convertBatch(
+        _ urls: [URL], to target: ImageFormat, quality: Double = defaultQuality, maxInFlight: Int = 4
+    ) async -> [Outcome] {
+        await window(urls, maxInFlight: maxInFlight) { await convert($0, to: target, quality: quality) }
     }
 
     /// Runs `job` per URL with at most `maxInFlight` at once; keeps input order.
@@ -75,25 +86,25 @@ public enum Converter {
     }
 
     /// Encodes the primary image in memory, so a name is claimed only once the bytes exist.
-    static func encode(_ src: CGImageSource, to target: ImageFormat) throws -> Data {
+    static func encode(_ src: CGImageSource, to target: ImageFormat, quality: Double) throws -> Data {
         let (width, height) = try pixelSize(src, at: CGImageSourceGetPrimaryImageIndex(src))
         if target == .webp { return try encodeWebP(src, side: max(width, height)) }
         // AddImageFromSource keeps EXIF, orientation and ICC; alpha to JPEG flattens on white.
-        return try writeImageIO(target) { CGImageDestinationAddImageFromSource($0, src, CGImageSourceGetPrimaryImageIndex(src), $1) }
+        return try writeImageIO(target, quality: quality) { CGImageDestinationAddImageFromSource($0, src, CGImageSourceGetPrimaryImageIndex(src), $1) }
     }
 
     /// Encodes an already-decoded image (PDF pages, lossy frames for a combined PDF).
-    static func encode(_ image: CGImage, to target: ImageFormat) throws -> Data {
+    static func encode(_ image: CGImage, to target: ImageFormat, quality: Double) throws -> Data {
         if target == .webp { return try encodeWebP(image) }
-        return try writeImageIO(target) { CGImageDestinationAddImage($0, image, $1) }
+        return try writeImageIO(target, quality: quality) { CGImageDestinationAddImage($0, image, $1) }
     }
 
-    private static func writeImageIO(_ target: ImageFormat, add: (CGImageDestination, CFDictionary) -> Void) throws -> Data {
+    private static func writeImageIO(_ target: ImageFormat, quality: Double, add: (CGImageDestination, CFDictionary) -> Void) throws -> Data {
         let data = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(data as CFMutableData, target.utType.identifier as CFString, 1, nil)
         else { throw ConvertError("can't write \(target.rawValue)") }
         let options: [CFString: Any] = switch target {
-        case .jpeg, .heic: [kCGImageDestinationLossyCompressionQuality: 0.85]
+        case .jpeg, .heic: [kCGImageDestinationLossyCompressionQuality: quality]
         // LZW (5): uncompressed, a blank 2000 px page is 12 MB.
         case .tiff: [kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFCompression: 5]]
         default: [:]

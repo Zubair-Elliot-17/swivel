@@ -93,7 +93,7 @@ private func megapixelPages(in dir: URL, name: String) throws -> URL {
     defer { cleanUp(dir) }
     let tag = "budget\(UUID().uuidString.prefix(8))"
     let source = try megapixelPages(in: dir, name: tag)
-    guard case .converted(_, let outputs) = Converter.renderPDF(source, to: .png, maxPixels: 2_000_000) else {
+    guard case .converted(_, let outputs) = Converter.renderPDF(source, to: .png, quality: Converter.defaultQuality, maxPixels: 2_000_000) else {
         Issue.record("not converted"); return
     }
     #expect(outputs.map(\.lastPathComponent) == ["\(tag) page 1.png", "\(tag) page 2.png"])
@@ -104,7 +104,7 @@ private func megapixelPages(in dir: URL, name: String) throws -> URL {
     let dir = try makeScratch()
     defer { cleanUp(dir) }
     let source = try megapixelPages(in: dir, name: "big")
-    #expect(Converter.renderPDF(source, to: .png, maxPixels: 500_000) == .skipped(source: source, .pageLimit))
+    #expect(Converter.renderPDF(source, to: .png, quality: Converter.defaultQuality, maxPixels: 500_000) == .skipped(source: source, .pageLimit))
     #expect(try files(in: dir) == ["big.pdf"])
 }
 
