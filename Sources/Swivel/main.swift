@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var drops: [UUID: Task<Void, Never>] = [:]  // running batches, for Cancel conversions
     private var lineOwner: UUID?  // the newest drop; only it writes the Last line and Reveal
     private var qaMode = false
+    private let defaults = UserDefaults.standard
+    private lazy var settings = SettingsWindow(defaults: defaults)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -37,10 +39,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enableTapItem.target = self
         menu.addItem(enableTapItem)
         menu.addItem(.separator())
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
         menu.addItem(NSMenuItem(title: "Quit Swivel", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
+        NSApp.mainMenu = mainMenu()
 
-        let wheel = WheelPanel(defaults: .standard) { [weak self] name, urls in self?.drop(name, urls) }
+        let wheel = WheelPanel(defaults: defaults) { [weak self] name, urls in self?.drop(name, urls) }
         let dragMonitor = DragMonitor(
             onState: { [dragLine] in dragLine.title = "Drag: \($0)" },
             onLive: { _ = wheel.hideClickMode() },
@@ -69,6 +75,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             drop(args[2], args.dropFirst(3).map { URL(fileURLWithPath: $0) })
             if busy == 0 { NSApp.terminate(nil) }  // unknown slice: nothing started
         }
+    }
+
+    /// Key equivalents need a main menu: Cmd-, opens Settings and Cmd-W closes it while it is key.
+    private func mainMenu() -> NSMenu {
+        let appMenu = NSMenu()
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        appMenu.addItem(settingsItem)
+        appMenu.addItem(NSMenuItem(title: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
+        let appItem = NSMenuItem()
+        appItem.submenu = appMenu
+        let main = NSMenu()
+        main.addItem(appItem)
+        return main
+    }
+
+    @objc private func openSettings() {
+        settings.show()
     }
 
     @objc private func enableTap() {
