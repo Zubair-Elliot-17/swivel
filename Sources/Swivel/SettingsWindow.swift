@@ -122,7 +122,7 @@ struct SettingsView: View {
                 .accessibilityLabel("JPEG and HEIC quality")
             }
         }
-        .frame(width: 340, height: 560)
+        .frame(width: 340, height: 620)  // fits every row and the quality slider without scrolling
     }
 
     private func set(_ kind: FileKind, _ visible: [String]) {
