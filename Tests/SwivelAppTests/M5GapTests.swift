@@ -3,7 +3,7 @@ import Testing
 import SwivelCore
 @testable import Swivel
 
-// Tester gap tests for M5 (untracked): throwaway suites only, removed after each test.
+// Tester gap tests for M5: throwaway suites only, removed after each test.
 @MainActor private func withSuite(_ body: (UserDefaults) -> Void) {
     let name = "swivel.apptests.gap.\(UUID().uuidString)"
     let suite = UserDefaults(suiteName: name)!
