@@ -114,3 +114,8 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **Settings toggles are labelled by format name only** ("PNG"): VoiceOver reads "PNG, switch"; consider "Show PNG on the Images wheel".
 - **Open at Login, `.requiresApproval` and next-login launch are manual-only** (QA M5-M1, M5-M2), and macOS 14 is unverified (M5-M3).
 - **`SWIVEL_QA=1` alone switches settings to the QA suite** (`AppDefaults`), even without `--qa-drop`: intended for scripted runs, noted so nobody sets it in a login shell.
+
+## M5 review (P3)
+- **A failed Open at Login is only logged** (`LoginItem.swift` click): `register()` errors (e.g. bad signature) leave the item unchecked with no explanation; show a short alert or a menu line.
+- **OCR never checks cancellation** (`TextExtract.swift` extractText page loop, pre-M5): Cancel conversions doesn't stop a 100-page OCR; check `Task.isCancelled` between pages.
+- **QA suite switch reads `SWIVEL_QA` alone** (`AppDefaults.swift` suiteName): also require `--qa-drop`, so a leaked env var can't point the normal app at the suite qa.sh wipes.
