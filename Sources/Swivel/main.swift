@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Quit Swivel", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
 
-        let wheel = WheelPanel { [weak self] name, urls in self?.drop(name, urls) }
+        let wheel = WheelPanel(defaults: .standard) { [weak self] name, urls in self?.drop(name, urls) }
         let dragMonitor = DragMonitor(
             onState: { [dragLine] in dragLine.title = "Drag: \($0)" },
             onLive: { _ = wheel.hideClickMode() },
