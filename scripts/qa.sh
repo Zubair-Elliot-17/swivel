@@ -8,8 +8,10 @@ BIN="$PWD/build/Swivel.app/Contents/MacOS/Swivel"
 ROOT=$PWD
 F=$(mktemp -d)
 MNT="$F/mnt"
-cleanup() { [ -d "$MNT" ] && hdiutil detach -quiet "$MNT" || true; rm -rf "$F"; }
+QA=dev.zubair.swivel.qa  # QA-mode settings suite; the user's dev.zubair.swivel is never touched
+cleanup() { [ -d "$MNT" ] && hdiutil detach -quiet "$MNT" || true; rm -rf "$F"; defaults delete $QA 2>/dev/null || true; }
 trap cleanup EXIT
+defaults delete $QA 2>/dev/null || true
 echo "sha $(git rev-parse --short HEAD)$(git diff --quiet HEAD || echo '+dirty'), fixtures $F"
 
 fails=0
@@ -179,6 +181,43 @@ line=$(drop PNG "$MNT/p.jpg")
 line=$(drop MP4 "$MNT/clip.mov")
 [[ "$line" == "Failed: clip.mov: "*" (0 of 1 converted)" ]] && [ "$(ls "$MNT" | sort | tr '\n' ' ')" = "clip.mov p.jpg " ] \
   && pass "M4-10 ($line)" || fail "M4-10" "got '$line', $(ls -a "$MNT" | tr '\n' ' ')"
+
+# M5: the quality setting. qdrop <dir> <slice> <source> <ext> [defaults write value...] converts a fresh copy
+# with `quality` set (absent when no value), checks the line and sets SIZE to the output's bytes.
+qdrop() {
+  local dir=$1 slice=$2 src=$3 ext=$4 stem; shift 4
+  stem=$(basename "${src%.*}")
+  defaults delete $QA quality 2>/dev/null || true
+  if [ $# -gt 0 ]; then defaults write $QA quality "$@"; fi
+  mkdir "$dir" && cp "$src" "$dir/"
+  expect "$dir line" "$(drop "$slice" "$dir/$(basename "$src")")" "Last: $stem.$ext (1 of 1)"
+  SIZE=$(stat -f %z "$dir/$stem.$ext" 2>/dev/null || echo 0)
+}
+# less <row> <a> <b>: passes when a < b.
+less() { [ "$2" -lt "$3" ] && pass "$1 ($2 < $3)" || fail "$1" "$2 is not < $3"; }
+
+# M5-1: HEIC -> JPEG with quality absent, 0.5 and 1.0.
+qdrop m51-abs JPEG photo.heic jpg; abs=$SIZE
+qdrop m51-low JPEG photo.heic jpg -float 0.5; low=$SIZE
+qdrop m51-high JPEG photo.heic jpg -float 1.0; high=$SIZE
+less "M5-1 q0.5 < absent" "$low" "$abs"
+less "M5-1 absent < q1.0" "$abs" "$high"
+
+# M5-2: junk and out-of-range values fall back or clamp.
+qdrop m52-str JPEG photo.heic jpg -string abc; expect "M5-2 string = absent" "$SIZE" "$abs"
+qdrop m52-neg JPEG photo.heic jpg -float -5; expect "M5-2 -5 = q0.5" "$SIZE" "$low"
+qdrop m52-big JPEG photo.heic jpg -float 1e20; expect "M5-2 1e20 = q1.0" "$SIZE" "$high"
+
+# M5-3: a PDF page to JPEG follows the setting.
+qdrop m53-abs JPEG one.pdf jpg; abs=$SIZE
+qdrop m53-low JPEG one.pdf jpg -float 0.5
+less "M5-3 q0.5 < absent" "$SIZE" "$abs"
+
+# M5-4: JPEG -> HEIC follows the setting.
+qdrop m54-abs HEIC a.jpg heic; abs=$SIZE
+qdrop m54-low HEIC a.jpg heic -float 0.5
+less "M5-4 q0.5 < absent" "$SIZE" "$abs"
+defaults delete $QA 2>/dev/null || true
 
 echo "$fails failed"
 exit $((fails > 0))

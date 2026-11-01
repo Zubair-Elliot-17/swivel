@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var drops: [UUID: Task<Void, Never>] = [:]  // running batches, for Cancel conversions
     private var lineOwner: UUID?  // the newest drop; only it writes the Last line and Reveal
     private var qaMode = false
-    private let defaults = UserDefaults.standard
+    private let defaults = AppDefaults.make(environment: ProcessInfo.processInfo.environment)
     private lazy var settings = SettingsWindow(defaults: defaults)
     private let loginItem = LoginItem()
 
@@ -112,7 +112,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let id = UUID()
         let job: @Sendable () async -> [Outcome]
         switch (ImageFormat(rawValue: name), AVTarget(rawValue: name), name) {
-        case (let format?, _, _): job = { await Converter.convertBatch(urls, to: format) }
+        case (let format?, _, _):
+            let quality = QualitySetting.read(defaults)  // once per drop, so a batch never mixes qualities
+            job = { await Converter.convertBatch(urls, to: format, quality: quality) }
         case (nil, let target?, _):
             let shown = OSAllocatedUnfairLock(initialState: "")  // last line posted, so only a new whole percent hops to main
             job = { [weak self] in
