@@ -3,7 +3,7 @@ import os
 import SwivelCore
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let dragLine = NSMenuItem(title: "Drag: idle", action: nil, keyEquivalent: "")
     private let lastDropLine = NSMenuItem(title: "Last: none", action: nil, keyEquivalent: "")
@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var qaMode = false
     private let defaults = UserDefaults.standard
     private lazy var settings = SettingsWindow(defaults: defaults)
+    private let loginItem = LoginItem()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -39,10 +40,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enableTapItem.target = self
         menu.addItem(enableTapItem)
         menu.addItem(.separator())
+        menu.addItem(loginItem.menuItem)
         let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
         menu.addItem(NSMenuItem(title: "Quit Swivel", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.delegate = self
         statusItem.menu = menu
         NSApp.mainMenu = mainMenu()
 
@@ -89,6 +92,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let main = NSMenu()
         main.addItem(appItem)
         return main
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        loginItem.refresh()  // the user can change it in System Settings at any time
     }
 
     @objc private func openSettings() {
