@@ -10,7 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let revealItem = NSMenuItem(title: "Reveal in Finder", action: #selector(reveal), keyEquivalent: "")
     private let cancelItem = NSMenuItem(title: "Cancel conversions", action: #selector(cancelConversions), keyEquivalent: "")
     private let tapLine = NSMenuItem(title: TapStatus.needsAccess.menuLine, action: nil, keyEquivalent: "")
-    private let enableTapItem = NSMenuItem(title: "Enable Shift-tap in Finder…", action: #selector(enableTap), keyEquivalent: "")
+    private let enableTapItem = NSMenuItem(title: "Enable tap in Finder…", action: #selector(enableTap), keyEquivalent: "")
     private var dragMonitor: DragMonitor?
     private var finderTap: FinderTap?
     private var revealTargets: [URL] = []
@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let wheel = WheelPanel(defaults: defaults) { [weak self] name, urls in self?.drop(name, urls) }
         let dragMonitor = DragMonitor(
+            defaults: defaults,
             onState: { [dragLine] in dragLine.title = "Drag: \($0)" },
             onLive: { _ = wheel.hideClickMode() },
             onTrigger: { wheel.show(at: $0) },
@@ -59,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.dragMonitor = dragMonitor
 
         // Tap path: the click wheel converts through the same drop(_:_:) as a drag.
-        let finderTap = FinderTap()
+        let finderTap = FinderTap(defaults: defaults)
         finderTap.isDragLive = { dragMonitor.isLive }
         finderTap.dismissWheel = { wheel.hideClickMode() }
         finderTap.onTap = { wheel.showForClick(at: $0, urls: $1) }
