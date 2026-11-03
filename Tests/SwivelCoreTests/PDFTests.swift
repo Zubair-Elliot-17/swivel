@@ -5,7 +5,7 @@ import OSLog
 import PDFKit
 import Testing
 import UniformTypeIdentifiers
-import SwivelCore
+@testable import SwivelCore
 
 // MARK: Helpers
 
@@ -148,7 +148,7 @@ func lossySourcesBecomeJPEGPages(format: ImageFormat) async throws {
     let dir = try makeScratch()
     defer { cleanUp(dir) }
     let jpeg = try write(.jpeg, in: dir, name: "src")
-    guard case .converted(_, let made) = await Converter.convert(jpeg, to: format), let source = made.first else {
+    guard case .converted(_, let made, _) = await Converter.convert(jpeg, to: format), let source = made.first else {
         Issue.record("fixture failed"); return
     }
     _ = await Converter.makePDF([source])
@@ -216,7 +216,7 @@ func lossySourcesBecomeJPEGPages(format: ImageFormat) async throws {
     let tag = UUID().uuidString.prefix(8)
     let source = try writeTIFF(frames: 3, in: dir, name: "cut\(tag)")
     let out = dir.appendingPathComponent("cut\(tag).pdf")
-    #expect(await Converter.makePDF([source], maxPages: 2) == [.converted(source: source, outputs: [out])])
+    #expect(await Converter.makePDF([source], maxPages: 2) == [.converted(source: source, outputs: [out], complete: false)])
     #expect(try PDFReadBack(out).pageSizes.count == 2)
     #expect(try loggedLines(containing: "cut\(tag).tiff: 1 page skipped (max 2)").count == 1)
 }
@@ -273,7 +273,7 @@ func transparentLossySourceIsNotBlackened(format: ImageFormat) async throws {
     let dir = try makeScratch()
     defer { cleanUp(dir) }
     let png = try write(.png, in: dir, name: "src")
-    guard case .converted(_, let made) = await Converter.convert(png, to: format), let source = made.first else {
+    guard case .converted(_, let made, _) = await Converter.convert(png, to: format), let source = made.first else {
         Issue.record("fixture failed"); return
     }
     try FileManager.default.removeItem(at: png)
@@ -285,7 +285,7 @@ func transparentLossySourceIsNotBlackened(format: ImageFormat) async throws {
 // MARK: PDF -> images
 
 private func names(_ outcome: Outcome) -> [String] {
-    guard case .converted(_, let outputs) = outcome else { return [] }
+    guard case .converted(_, let outputs, _) = outcome else { return [] }
     return outputs.map(\.lastPathComponent)
 }
 
@@ -438,4 +438,54 @@ func lockedPDFIsSkipped(target: ImageFormat) async throws {
     let pdf = try writePDF(in: dir, pages: 2), png = try write(.png, in: dir)
     let outcomes = await Converter.convertBatch([pdf, png], to: .jpeg)
     #expect(outcomes.map(names) == [["doc page 1.jpg", "doc page 2.jpg"], ["photo.jpg"]])
+}
+
+// MARK: complete flag (M6)
+
+private func isComplete(_ outcome: Outcome) -> Bool? {
+    guard case .converted(_, _, let complete) = outcome else { return nil }
+    return complete
+}
+
+@Test func pdfPastThePageCapIsIncomplete() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try writePDF(in: dir, pages: 2)
+    #expect(isComplete(Converter.renderPDF(source, to: .png, quality: Converter.defaultQuality, maxPages: 1)) == false)
+}
+
+@Test func pdfStoppedByThePixelBudgetIsIncomplete() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    // Each 72x144 pt page is 150x300 px at 150 dpi, so a 50,000 px budget fits one.
+    let source = try writePDF(in: dir, pages: 2)
+    let outcome = Converter.renderPDF(source, to: .png, quality: Converter.defaultQuality, maxPixels: 50_000)
+    #expect(names(outcome) == ["doc page 1.png"])
+    #expect(isComplete(outcome) == false)
+}
+
+@Test func pdfUnderBothCapsIsComplete() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try writePDF(in: dir, pages: 2)
+    let outcome = Converter.renderPDF(source, to: .png, quality: Converter.defaultQuality, maxPages: 2, maxPixels: 90_000)
+    #expect(names(outcome).count == 2)
+    #expect(isComplete(outcome) == true)
+}
+
+@Test func combinedPDFSourceCutByTheCapIsIncomplete() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let whole = try write(.png, in: dir, name: "a"), cut = try writeTIFF(frames: 3, in: dir)
+    let out = dir.appendingPathComponent("a.pdf")
+    #expect(await Converter.makePDF([whole, cut], maxPages: 2) == [
+        .converted(source: whole, outputs: [out], complete: true), .converted(source: cut, outputs: [out], complete: false),
+    ])
+}
+
+@Test func combinedPDFSourceWithEveryFrameIsComplete() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try writeTIFF(frames: 3, in: dir)
+    #expect(await Converter.makePDF([source], maxPages: 3) == [.converted(source: source, outputs: [dir.appendingPathComponent("multi.pdf")], complete: true)])
 }

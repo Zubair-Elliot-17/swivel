@@ -298,7 +298,7 @@ func imagesOverThePixelCapFailBeforeDecoding(target: ImageFormat) async throws {
 
     let outcomes = await Converter.convertBatch(sources, to: .jpeg)
     let outputs = outcomes.compactMap { outcome -> String? in
-        guard case .converted(_, let outputs) = outcome else { return nil }
+        guard case .converted(_, let outputs, _) = outcome else { return nil }
         return outputs.first?.lastPathComponent
     }
     #expect(outputs.count == 3)
@@ -321,4 +321,36 @@ func emptyBatchOrTinyCapStillWorks(cap: Int) async throws {
     defer { cleanUp(dir) }
     let sources = try (0..<3).map { try write(.png, in: dir, name: "p\($0)") }
     #expect(await Converter.convertBatch(sources, to: .tiff, maxInFlight: cap).count == 3)
+}
+
+// MARK: complete flag (M6)
+
+/// Only the primary frame is encoded, so a multi-frame source is a partial conversion.
+@Test(arguments: [ImageFormat.png, .jpeg, .heic, .webp])
+func multiFrameTIFFIsIncomplete(target: ImageFormat) async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try writeTIFF(frames: 2, in: dir)
+    let out = dir.appendingPathComponent("multi.\(target.fileExtension)")
+    #expect(await Converter.convert(source, to: target) == .converted(source: source, outputs: [out], complete: false))
+}
+
+@Test func animatedGIFIsIncomplete() async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let frame = try ReadBack(try write(.png, in: dir, name: "frame")).image
+    let source = dir.appendingPathComponent("anim.gif")
+    let dest = try #require(CGImageDestinationCreateWithURL(source as CFURL, UTType.gif.identifier as CFString, 2, nil))
+    for _ in 0..<2 { CGImageDestinationAddImage(dest, frame, nil) }
+    #expect(CGImageDestinationFinalize(dest))
+    #expect(await Converter.convert(source, to: .png) == .converted(source: source, outputs: [dir.appendingPathComponent("anim.png")], complete: false))
+}
+
+@Test(arguments: [ImageFormat.png, .tiff])
+func singleFrameImageIsComplete(target: ImageFormat) async throws {
+    let dir = try makeScratch()
+    defer { cleanUp(dir) }
+    let source = try write(.jpeg, in: dir)
+    let out = dir.appendingPathComponent("photo.\(target.fileExtension)")
+    #expect(await Converter.convert(source, to: target) == .converted(source: source, outputs: [out], complete: true))
 }

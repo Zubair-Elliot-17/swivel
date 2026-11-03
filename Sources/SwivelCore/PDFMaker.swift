@@ -43,7 +43,7 @@ extension Converter {
             return made
         }
         // nil marks a source that gave pages; it becomes .converted once the PDF is claimed.
-        var outcomes: [Outcome?] = [], pages = 0
+        var outcomes: [Outcome?] = [], pages = 0, cut: Set<Int> = []  // cut: indexes of sources with frames left out
         // Q8: a cancelled combined PDF writes nothing; the defer removes the temp file.
         let cancelled = { urls.map { Outcome.failed(source: $0, reason: "cancelled") } }
         for url in urls {
@@ -86,11 +86,13 @@ extension Converter {
                     pages += 1
                     drawn += 1
                 }
+                if drawn < count { cut.insert(outcomes.count) }
                 outcomes.append(nil)
             } catch where drawn > 0 {
                 // Like a source cut by the page cap: its drawn pages are in the PDF, so it counts as converted.
                 let missing = min(count, room) - drawn
                 convertLog.info("\(url.lastPathComponent, privacy: .public): \(missing) page\(missing == 1 ? "" : "s") not read (\(error.localizedDescription, privacy: .public))")
+                cut.insert(outcomes.count)
                 outcomes.append(nil)
             } catch {
                 outcomes.append(failed(url, error))
@@ -104,7 +106,9 @@ extension Converter {
             // CGDataConsumer drops write errors (disk full), so check the file before naming it.
             guard CGPDFDocument(temp as CFURL)?.numberOfPages == pages else { throw ConvertError("couldn't write PDF") }
             let output = try claim(file: temp, source: urls[first], ext: "pdf")
-            return zip(urls, outcomes).map { $1 ?? .converted(source: $0, outputs: [output]) }
+            return zip(urls, outcomes).enumerated().map { i, pair in
+                pair.1 ?? .converted(source: pair.0, outputs: [output], complete: !cut.contains(i))
+            }
         } catch {
             return zip(urls, outcomes).map { $1 ?? failed($0, error) }
         }

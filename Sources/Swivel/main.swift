@@ -168,7 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func logOutcome(_ outcome: Outcome) {
         switch outcome {
-        case .converted(let source, let outputs):
+        case .converted(let source, let outputs, _):
             let names = outputs.map(\.lastPathComponent).joined(separator: ", ")
             log.info("converted \(source.lastPathComponent, privacy: .public) -> \(names, privacy: .public)")
         case .skipped(let source, let reason):

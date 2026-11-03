@@ -51,7 +51,7 @@ func hostilePageBoxFailsForText(box: String) async throws {
     let dir = try makeScratch()
     defer { cleanUp(dir) }
     let source = try rawPDF(mediaBox: "0 0 40000 10", in: dir)
-    guard case .converted(_, let outputs) = await Converter.convert(source, to: .png) else { Issue.record("not converted"); return }
+    guard case .converted(_, let outputs, _) = await Converter.convert(source, to: .png) else { Issue.record("not converted"); return }
     let out = try ReadBack(outputs[0])
     #expect(out.width == 65535 && (1...21).contains(out.height), "\(out.width)x\(out.height)")
 }
@@ -69,7 +69,7 @@ private func tiffCompression(_ url: URL) throws -> Int? {
     let dir = try makeScratch()
     defer { cleanUp(dir) }
     let source = try writePDF(in: dir, size: CGSize(width: 960, height: 960))
-    guard case .converted(_, let outputs) = await Converter.convert(source, to: .tiff) else { Issue.record("not converted"); return }
+    guard case .converted(_, let outputs, _) = await Converter.convert(source, to: .tiff) else { Issue.record("not converted"); return }
     #expect(try ReadBack(outputs[0]).width == 2000)
     #expect(try tiffCompression(outputs[0]) == 5)
     #expect(try Data(contentsOf: outputs[0]).count < 1_000_000)
@@ -79,7 +79,7 @@ private func tiffCompression(_ url: URL) throws -> Int? {
     let dir = try makeScratch()
     defer { cleanUp(dir) }
     let source = try write(.png, in: dir)
-    guard case .converted(_, let outputs) = await Converter.convert(source, to: .tiff) else { Issue.record("not converted"); return }
+    guard case .converted(_, let outputs, _) = await Converter.convert(source, to: .tiff) else { Issue.record("not converted"); return }
     #expect(try tiffCompression(outputs[0]) == 5)
 }
 
@@ -93,7 +93,7 @@ private func megapixelPages(in dir: URL, name: String) throws -> URL {
     defer { cleanUp(dir) }
     let tag = "budget\(UUID().uuidString.prefix(8))"
     let source = try megapixelPages(in: dir, name: tag)
-    guard case .converted(_, let outputs) = Converter.renderPDF(source, to: .png, quality: Converter.defaultQuality, maxPixels: 2_000_000) else {
+    guard case .converted(_, let outputs, _) = Converter.renderPDF(source, to: .png, quality: Converter.defaultQuality, maxPixels: 2_000_000) else {
         Issue.record("not converted"); return
     }
     #expect(outputs.map(\.lastPathComponent) == ["\(tag) page 1.png", "\(tag) page 2.png"])
@@ -179,7 +179,7 @@ private func tiffWithBrokenSecondFrame(in dir: URL, name: String) throws -> URL 
     let tag = "prescan\(UUID().uuidString.prefix(8))"
     let source = try tiffWithBrokenSecondFrame(in: dir, name: tag)
     let out = dir.appendingPathComponent("\(tag).pdf")
-    #expect(await Converter.makePDF([source], maxPages: 1) == [.converted(source: source, outputs: [out])])
+    #expect(await Converter.makePDF([source], maxPages: 1) == [.converted(source: source, outputs: [out], complete: false)])
     #expect(try PDFReadBack(out).pageSizes == [CGSize(width: 16, height: 8)])
     #expect(try loggedLines(containing: "\(tag).tiff: 1 page skipped (max 1)").count == 1)
 }

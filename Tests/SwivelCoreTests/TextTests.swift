@@ -37,7 +37,7 @@ private func save(_ image: CGImage, as type: UTType, to url: URL, orientation: I
 }
 
 private func text(_ outcome: Outcome) throws -> String? {
-    guard case .converted(_, let outputs) = outcome, outputs.count == 1 else { return nil }
+    guard case .converted(_, let outputs, _) = outcome, outputs.count == 1 else { return nil }
     return try String(contentsOf: outputs[0], encoding: .utf8)
 }
 

@@ -36,7 +36,7 @@ extension Converter {
                 return .failed(source: source, reason: reason, detail: "\(detail ?? reason); wrote \(written)")
             }
         }
-        return .converted(source: source, outputs: outputs)
+        return .converted(source: source, outputs: outputs, complete: outputs.count == count)
     }
 
     /// Opens a PDF, or the outcome for one that won't open: unreadable, locked or unparseable.

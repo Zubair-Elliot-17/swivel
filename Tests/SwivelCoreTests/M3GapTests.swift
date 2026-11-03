@@ -20,7 +20,7 @@ private func textPDF(_ lines: [String], in dir: URL, name: String = "doc", optio
 }
 
 private func textOf(_ outcome: Outcome) throws -> String? {
-    guard case .converted(_, let outputs) = outcome, outputs.count == 1 else { return nil }
+    guard case .converted(_, let outputs, _) = outcome, outputs.count == 1 else { return nil }
     return try String(contentsOf: outputs[0], encoding: .utf8)
 }
 
@@ -67,7 +67,7 @@ private func textOf(_ outcome: Outcome) throws -> String? {
     defer { cleanUp(dir) }
     let line = "Café naïve façade — über"
     let outcome = await Converter.extractText(try textPDF([line], in: dir))
-    guard case .converted(_, let outputs) = outcome else { Issue.record("got \(outcome)"); return }
+    guard case .converted(_, let outputs, _) = outcome else { Issue.record("got \(outcome)"); return }
     #expect(try Data(contentsOf: outputs[0]) == Data(line.utf8))
 }
 
@@ -77,7 +77,7 @@ private func textOf(_ outcome: Outcome) throws -> String? {
     defer { cleanUp(dir) }
     let source = try writePDF(in: dir, size: CGSize(width: 14400, height: 14400))
     let outcome = await Converter.convert(source, to: .jpeg)
-    guard case .converted(_, let outputs) = outcome else { Issue.record("got \(outcome)"); return }
+    guard case .converted(_, let outputs, _) = outcome else { Issue.record("got \(outcome)"); return }
     let src = try #require(CGImageSourceCreateWithURL(outputs[0] as CFURL, nil))
     let props = try #require(CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any])
     let w = try #require(props[kCGImagePropertyPixelWidth] as? Int), h = try #require(props[kCGImagePropertyPixelHeight] as? Int)
@@ -90,7 +90,7 @@ private func textOf(_ outcome: Outcome) throws -> String? {
     defer { cleanUp(dir) }
     let tag = "hundred\(UUID().uuidString.prefix(8))"
     let source = try writePDF(in: dir, name: tag, pages: 100, size: CGSize(width: 10, height: 10))
-    guard case .converted(_, let outputs) = await Converter.convert(source, to: .png) else { Issue.record("not converted"); return }
+    guard case .converted(_, let outputs, _) = await Converter.convert(source, to: .png) else { Issue.record("not converted"); return }
     #expect(outputs.count == 100 && outputs.last?.lastPathComponent == "\(tag) page 100.png")
     #expect(try loggedLines(containing: "\(tag).pdf:").isEmpty)
 }
