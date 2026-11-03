@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var revealTargets: [URL] = []
     private var busy = 0  // batches in flight; overlapping drops keep the icon busy until all finish
     private var drops: [UUID: Task<Void, Never>] = [:]  // running batches, for Cancel conversions
+    private var dropURLs: [UUID: [URL]] = [:]  // what each running batch uses, so trashing skips a file another drop holds
     private var lineOwner: UUID?  // the newest drop; only it writes the Last line and Reveal
     private var qaMode = false
     private let defaults = AppDefaults.make(environment: ProcessInfo.processInfo.environment)
@@ -136,14 +137,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             log.info("drop on unknown slice \(name, privacy: .public)")
             return
         }
+        let trash = TrashSetting.read(defaults)  // once per drop, like quality
         busy += 1
         updateIcon()
         lineOwner = id
+        dropURLs[id] = urls
         drops[id] = Task { @MainActor in
             let outcomes = await job()
-            drops[id] = nil  // before the summary, so a late progress hop can't overwrite it
+            dropURLs[id] = nil
             for outcome in outcomes { logOutcome(outcome) }
-            let summary = BatchSummary(outcomes)
+            // Still in `drops` here, so Cancel during the trash step stops it.
+            let notTrashed = await TrashRun.afterBatch(outcomes, slice: name, enabled: trash) { self.dropURLs.values.flatMap { $0 } }
+            drops[id] = nil  // before the summary, so a late progress hop can't overwrite it
+            let summary = BatchSummary(outcomes, notTrashed: notTrashed)
             if lineOwner == id {
                 lastDropLine.title = summary.menuLine
                 revealTargets = summary.outputs
