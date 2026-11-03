@@ -119,3 +119,12 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **A failed Open at Login is only logged** (`LoginItem.swift` click): `register()` errors (e.g. bad signature) leave the item unchecked with no explanation; show a short alert or a menu line.
 - **OCR never checks cancellation** (`TextExtract.swift` extractText page loop, pre-M5): Cancel conversions doesn't stop a 100-page OCR; check `Task.isCancelled` between pages.
 - **QA suite switch reads `SWIVEL_QA` alone** (`AppDefaults.swift` suiteName): also require `--qa-drop`, so a leaked env var can't point the normal app at the suite qa.sh wipes.
+
+## M6 trash and trigger (P3)
+- **Combined-PDF `drawn > 0` partial has no test** (`PDFMaker.swift` catch): needs a frame whose properties read but whose decode fails; it shares the `cut` set with the page-cap path, which is tested.
+- **Trash runs on the main actor** (`TrashRun.run`): fine for local volumes; a big batch on a slow network share could stall the menu. Move it off main if that shows up.
+- **iPhone HEIC with aux or burst images** may report more than one frame and so never be trashed (safe); not checked on a real burst.
+- **Video→video can drop extra audio/subtitle tracks** (`AVConvert.swift`): README warns; keep all tracks in a remux before trash is used on such files.
+- **No Ctrl drag in macui** (`ev` has no `ctrldown`): the Control-only drag is covered by pure tests; add `ctrldown/ctrlup` to drive it.
+- **Duplicate sources keep the first outcome's outputs** (`Trash.trashCandidates`): the exists check looks at those only; fine since every copy converted the same file.
+
