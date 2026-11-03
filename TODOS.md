@@ -123,7 +123,9 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 ## M6 trash and trigger (P3)
 - **Trash runs on the main actor** (`TrashRun.run`): fine for local volumes; a big batch on a slow network share could stall the menu. Move it off main if that shows up.
 - **iPhone HEIC with aux or burst images** may report more than one frame and so never be trashed (safe); not checked on a real burst.
-- **Video→video can drop subtitle/text tracks unchecked** (`AVConvert.swift` `keepsTracks`): audio and video tracks are compared; README warns about the rest.
+- **Video→video can drop subtitle, chapter, timecode and metadata tracks unchecked** (`AVConvert.swift` `keepsTracks`): audio and video tracks are compared; README warns about the rest. Comparing track counts by media type would catch them.
+- **One unreadable later audio track now skips the whole file** (`AVConvert.swift:277-278` probe): every audio track's format is loaded with `try`; use `try?` for tracks after the first and record (0,0), as before M6.
+- **Tracks are paired by position** (`AVConvert.swift:112-115` `keepsTracks`): an export that reorders audio tracks would read as partial (safe: original kept); sort both lists by (channels, rate) if it ever shows up.
 - **No Ctrl drag in macui** (`ev` has no `ctrldown`): the Control-only drag is covered by pure tests; add `ctrldown/ctrlup` to drive it.
 - **Duplicate sources keep the first outcome's outputs** (`Trash.trashCandidates`): the exists check looks at those only; fine since every copy converted the same file.
 - **Combined-PDF `catch where drawn > 0` untested, mutant survived** (`PDFMaker.swift:91-96`): unreachable from files (14 broken TIFFs tried; frame-read failures also fail the pixelSize precheck); add a frame-read seam if it ever becomes reachable.
