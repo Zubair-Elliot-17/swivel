@@ -4,7 +4,7 @@ import Foundation
 /// Result of converting one dropped file.
 public enum Outcome: Equatable, Sendable {
     /// A PDF source gives one output per page; every source of a combined PDF carries the same output.
-    /// `complete` is false when only part of the source made it out (extra frames, page or pixel caps, audio downmix or resample).
+    /// `complete` is false when only part of the source made it out (extra frames, page or pixel caps, an AV track, channels or rate dropped).
     case converted(source: URL, outputs: [URL], complete: Bool = true)
     case skipped(source: URL, SkipReason)
     /// `reason` is short for the menu; `detail` is the full error text for the log when it differs.

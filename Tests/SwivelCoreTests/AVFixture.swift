@@ -8,10 +8,11 @@ enum AVFixture {
     enum Video { case h264, hevc }
 
     /// `frames` defaults to 10 per second; `audioSeconds` to `seconds`; `fileType` .wav writes 16-bit LPCM audio, every other type AAC.
+    /// `audioTracks` identical tracks of `channels` each (6 is 5.1).
     static func write(
         _ name: String, in dir: URL, video: Video? = .h264, audio: Bool = true, size: CGSize = CGSize(width: 320, height: 240),
         seconds: Double = 2, audioSeconds: Double? = nil, frames: Int? = nil, transform: CGAffineTransform = .identity,
-        fileType: AVFileType = .mov
+        fileType: AVFileType = .mov, audioTracks: Int = 1, channels: Int = 1, pcm: Bool = false
     ) async throws -> URL {
         let url = dir.appendingPathComponent(name)
         let writer = try AVAssetWriter(outputURL: url, fileType: fileType)
@@ -42,29 +43,37 @@ enum AVFixture {
             } }))
         }
 
-        if audio {
-            let pcm = fileType == .wav
-            let settings: [String: Any] = pcm
-                ? [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 44100, AVNumberOfChannelsKey: 1,
+        for _ in 0..<(audio ? audioTracks : 0) {
+            let pcm = pcm || fileType == .wav
+            var layout = AudioChannelLayout()
+            layout.mChannelLayoutTag = channels == 6 ? kAudioChannelLayoutTag_MPEG_5_1_D : kAudioChannelLayoutTag_DiscreteInOrder | UInt32(channels)
+            var settings: [String: Any] = pcm
+                ? [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 44100, AVNumberOfChannelsKey: channels,
                    AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false,
                    AVLinearPCMIsNonInterleaved: false]
-                : [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44100, AVNumberOfChannelsKey: 1]
+                : [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44100, AVNumberOfChannelsKey: channels]
+            if channels > 2 { settings[AVChannelLayoutKey] = Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size) }
             let input = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
             #expect(writer.canAdd(input))
             writer.add(input)
             var asbd = AudioStreamBasicDescription(
                 mSampleRate: 44100, mFormatID: kAudioFormatLinearPCM, mFormatFlags: kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked,
-                mBytesPerPacket: 2, mFramesPerPacket: 1, mBytesPerFrame: 2, mChannelsPerFrame: 1, mBitsPerChannel: 16, mReserved: 0)
+                mBytesPerPacket: UInt32(2 * channels), mFramesPerPacket: 1, mBytesPerFrame: UInt32(2 * channels),
+                mChannelsPerFrame: UInt32(channels), mBitsPerChannel: 16, mReserved: 0)
             var format: CMAudioFormatDescription?
-            CMAudioFormatDescriptionCreate(allocator: nil, asbd: &asbd, layoutSize: 0, layout: nil, magicCookieSize: 0, magicCookie: nil,
-                                           extensions: nil, formatDescriptionOut: &format)
-            let chunk = 4410, chunks = Int(((audioSeconds ?? seconds) * 10).rounded())
+            withUnsafePointer(to: &layout) { l in
+                _ = CMAudioFormatDescriptionCreate(allocator: nil, asbd: &asbd, layoutSize: channels > 2 ? MemoryLayout<AudioChannelLayout>.size : 0,
+                                                   layout: channels > 2 ? l : nil, magicCookieSize: 0, magicCookie: nil,
+                                                   extensions: nil, formatDescriptionOut: &format)
+            }
+            let chunk = 4410, bytes = chunk * 2 * channels, chunks = Int(((audioSeconds ?? seconds) * 10).rounded())
             lanes.append((input, (0..<chunks).map { c in {
-                var samples = (0..<chunk).map { Int16(8000 * sin(Double(c * chunk + $0) * 2 * .pi * 440 / 44100)) }
+                // Interleaved: the same sample on every channel of a frame.
+                var samples = (0..<chunk * channels).map { Int16(8000 * sin(Double(c * chunk + $0 / channels) * 2 * .pi * 440 / 44100)) }
                 var block: CMBlockBuffer?
-                CMBlockBufferCreateWithMemoryBlock(allocator: nil, memoryBlock: nil, blockLength: chunk * 2, blockAllocator: nil,
-                                                   customBlockSource: nil, offsetToData: 0, dataLength: chunk * 2, flags: 0, blockBufferOut: &block)
-                CMBlockBufferReplaceDataBytes(with: &samples, blockBuffer: block!, offsetIntoDestination: 0, dataLength: chunk * 2)
+                CMBlockBufferCreateWithMemoryBlock(allocator: nil, memoryBlock: nil, blockLength: bytes, blockAllocator: nil,
+                                                   customBlockSource: nil, offsetToData: 0, dataLength: bytes, flags: 0, blockBufferOut: &block)
+                CMBlockBufferReplaceDataBytes(with: &samples, blockBuffer: block!, offsetIntoDestination: 0, dataLength: bytes)
                 var sample: CMSampleBuffer?
                 CMAudioSampleBufferCreateReadyWithPacketDescriptions(
                     allocator: nil, dataBuffer: block!, formatDescription: format!, sampleCount: chunk,
