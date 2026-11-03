@@ -121,10 +121,17 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **QA suite switch reads `SWIVEL_QA` alone** (`AppDefaults.swift` suiteName): also require `--qa-drop`, so a leaked env var can't point the normal app at the suite qa.sh wipes.
 
 ## M6 trash and trigger (P3)
-- **Combined-PDF `drawn > 0` partial has no test** (`PDFMaker.swift` catch): needs a frame whose properties read but whose decode fails; it shares the `cut` set with the page-cap path, which is tested.
 - **Trash runs on the main actor** (`TrashRun.run`): fine for local volumes; a big batch on a slow network share could stall the menu. Move it off main if that shows up.
 - **iPhone HEIC with aux or burst images** may report more than one frame and so never be trashed (safe); not checked on a real burst.
 - **Video→video can drop extra audio/subtitle tracks** (`AVConvert.swift`): README warns; keep all tracks in a remux before trash is used on such files.
 - **No Ctrl drag in macui** (`ev` has no `ctrldown`): the Control-only drag is covered by pure tests; add `ctrldown/ctrlup` to drive it.
 - **Duplicate sources keep the first outcome's outputs** (`Trash.trashCandidates`): the exists check looks at those only; fine since every copy converted the same file.
+- **Combined-PDF `catch where drawn > 0` untested, mutant survived** (`PDFMaker.swift:91-96`): unreachable from files (14 broken TIFFs tried; frame-read failures also fail the pixelSize precheck); add a frame-read seam if it ever becomes reachable.
+- **EXIF/GPS lost for WebP and combined PDF before the original is trashed** (`Converter.swift:136`, `PDFMaker.swift`): the trashed original was the only copy of that metadata.
+- **Source replaced at the same path between conversion and trash** (atomic save, sync) is trashed unchecked (`TrashRun.swift:31`): compare fileResourceIdentifier + modification date from conversion time.
+- **Symlinked source trash behaviour not pinned** (`TrashRun.swift:51`): untested whether the link or its target goes; consider skipping symlinks.
+- **In-use and dedupe compare standardized paths only** (`TrashRun.swift:24`, `Trash.swift:17`): /var vs /private/var and case differences slip through; use fileResourceIdentifier.
+- **qa.sh trust checks** (`scripts/qa.sh:10`, `:228-230`): assert $MNT is a separate mounted volume (`stat -f %d`), and make tdrop reject `/../` and paths off the image.
+- **Pre-existing: full drop paths logged with privacy .public** (`main.swift:113`).
+- **main.swift trash wiring has no app-level test** (`main.swift:140-150`): cancel between job() and trash and the busy bookkeeping are unit-covered via TrashRun only.
 
