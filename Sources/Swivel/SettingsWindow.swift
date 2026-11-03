@@ -78,19 +78,63 @@ enum QualitySetting {
     static func write(_ value: Double, to defaults: UserDefaults) { defaults.set(Converter.quality(value), forKey: key) }
 }
 
+/// Move original to Trash, off unless the store holds a real Bool true (strings and other numbers are junk).
+enum TrashSetting {
+    static let key = "trashOriginal"
+
+    static func read(_ defaults: UserDefaults) -> Bool { defaults.object(forKey: key) as? Bool == true }
+    static func write(_ on: Bool, to defaults: UserDefaults) { defaults.set(on, forKey: key) }
+}
+
+/// Which modifier opens the wheel; junk reads as both.
+enum TriggerSetting {
+    static let key = "triggerKeys"
+
+    static func read(_ defaults: UserDefaults) -> TriggerKeys { TriggerKeys(raw: defaults.object(forKey: key)) }
+    static func write(_ keys: TriggerKeys, to defaults: UserDefaults) { defaults.set(keys.rawValue, forKey: key) }
+
+    static func label(_ keys: TriggerKeys) -> String {
+        switch keys {
+        case .shift: "Shift"
+        case .control: "Control"
+        case .both: "Shift or Control"
+        }
+    }
+}
+
 struct SettingsView: View {
     let defaults: UserDefaults
     @State var layouts: [FileKind: [String]]
     @State var quality: Double
+    @State var trash: Bool
+    @State var trigger: TriggerKeys
 
     init(defaults: UserDefaults) {
         self.defaults = defaults
         _layouts = State(initialValue: Dictionary(uniqueKeysWithValues: FileKind.allCases.map { ($0, Geometry.slices(for: $0, defaults: defaults)) }))
         _quality = State(initialValue: QualitySetting.read(defaults))
+        _trash = State(initialValue: TrashSetting.read(defaults))
+        _trigger = State(initialValue: TriggerSetting.read(defaults))
     }
 
     var body: some View {
         List {
+            Section("General") {
+                VStack(alignment: .leading, spacing: 2) {
+                    Toggle("Move original to Trash", isOn: Binding(get: { trash }, set: { trash = $0; TrashSetting.write($0, to: defaults) }))
+                        .accessibilityLabel("Move original to Trash")
+                        .accessibilityHint(Self.trashNote)
+                    Text(Self.trashNote)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityHidden(true)  // read as the toggle's hint
+                }
+                Picker("Open the wheel with", selection: Binding(get: { trigger }, set: { trigger = $0; TriggerSetting.write($0, to: defaults) })) {
+                    ForEach(TriggerKeys.allCases, id: \.self) { Text(TriggerSetting.label($0)).tag($0) }
+                }
+                .accessibilityLabel("Open the wheel with")
+            }
             ForEach(FileKind.allCases, id: \.self) { kind in
                 Section {
                     let visible = layouts[kind] ?? kind.known
@@ -122,8 +166,10 @@ struct SettingsView: View {
                 .accessibilityLabel("JPEG and HEIC quality")
             }
         }
-        .frame(width: 340, height: 620)  // fits every row and the quality slider without scrolling
+        .frame(width: 340, height: 760)  // fits every row and the quality slider without scrolling
     }
+
+    static let trashNote = "Only after a full conversion; never for Extract text, Make GIF or Extract audio. Lossy formats too."
 
     private func set(_ kind: FileKind, _ visible: [String]) {
         LayoutRows.save(visible, kind: kind, defaults: defaults)
