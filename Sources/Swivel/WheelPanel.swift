@@ -12,11 +12,13 @@ final class WheelPanel {
     private let panel = NSPanel(
         contentRect: NSRect(origin: .zero, size: wheelSize),
         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
-    private let view = WheelView(frame: NSRect(origin: .zero, size: wheelSize))
+    let view: WheelView
     private var pendingHide: Timer?
     private var keyWatch: Timer?
 
-    init(onDrop: @escaping (String, [URL]) -> Void) {
+    /// `defaults` holds the user's wheel layouts (the QA suite in QA mode).
+    init(defaults: UserDefaults, onDrop: @escaping (String, [URL]) -> Void) {
+        view = WheelView(frame: NSRect(origin: .zero, size: wheelSize), defaults: defaults)
         panel.level = .popUpMenu
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.hidesOnDeactivate = false
@@ -42,7 +44,7 @@ final class WheelPanel {
     /// Opens the wheel at `point` for `urls` already chosen (Finder selection); a click picks the slice.
     func showForClick(at point: NSPoint, urls: [URL]) {
         hide()
-        view.slices = Geometry.slices(for: urls)
+        view.show(Geometry.kind(for: urls))
         view.clickURLs = urls
         place(at: point)
         // Finder keeps the keys, so arrows or typing would change its selection under the wheel: hide on any keyDown (not under VoiceOver).
@@ -101,7 +103,7 @@ final class WheelPanel {
         keyWatch = nil
         view.highlight = nil
         view.clickURLs = nil
-        view.slices = Geometry.sliceNames
+        view.show(.image)
         panel.orderOut(nil)
     }
 }
@@ -114,22 +116,26 @@ final class WheelView: NSView {
     var clickURLs: [URL]? {
         didSet { setAccessibilityChildren(clickURLs == nil ? nil : sliceElements) }
     }
-    /// The slice set for this show: the image set until a drop's or selection's kind picks another.
-    var slices = Geometry.sliceNames {
-        didSet {
-            guard slices != oldValue else { return }
-            sliceElements = makeSliceElements()
-            if clickURLs != nil { setAccessibilityChildren(sliceElements) }
-            needsDisplay = true
-        }
-    }
+    private let defaults: UserDefaults
+    /// The wheel for this show: the image layout until a drop's or selection's kind picks another.
+    private(set) var kind = FileKind.image
+    private(set) var slices: [String]
     private var sliceElements: [NSAccessibilityElement] = []
+
+    /// Shows the user's layout for `kind`; AX elements are always rebuilt, since equal lists can differ in kind (OV2).
+    func show(_ kind: FileKind) {
+        self.kind = kind
+        slices = Geometry.slices(for: kind, defaults: defaults)
+        sliceElements = makeSliceElements()
+        if clickURLs != nil { setAccessibilityChildren(sliceElements) }
+        needsDisplay = true
+    }
 
     private func makeSliceElements() -> [NSAccessibilityElement] {
         slices.indices.map { i in
             let c = labelCenter(i)
             return SliceElement(
-                label: Geometry.label(for: slices[i], in: slices), frame: NSRect(x: c.x - 22, y: c.y - 12, width: 44, height: 24),
+                label: Geometry.label(for: slices[i], kind: kind), frame: NSRect(x: c.x - 22, y: c.y - 12, width: 44, height: 24),
                 parent: self, press: { [weak self] in self?.pick(i) })
         }
     }
@@ -137,7 +143,9 @@ final class WheelView: NSView {
         didSet { if highlight != oldValue { needsDisplay = true } }
     }
 
-    override init(frame: NSRect) {
+    init(frame: NSRect, defaults: UserDefaults) {
+        self.defaults = defaults
+        slices = Geometry.slices(for: .image, defaults: defaults)
         super.init(frame: frame)
         registerForDraggedTypes([.fileURL])
         setAccessibilityRole(.group)
@@ -192,7 +200,7 @@ final class WheelView: NSView {
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         // The wheel opens under the pointer, so this comes at once; the set stays fixed for the show (Q3).
-        if clickURLs == nil { slices = Geometry.slices(for: fileURLs(sender)) }
+        if clickURLs == nil { show(Geometry.kind(for: fileURLs(sender))) }
         return draggingUpdated(sender)
     }
 

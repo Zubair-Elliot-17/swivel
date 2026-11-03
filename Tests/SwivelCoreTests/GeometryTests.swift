@@ -59,33 +59,125 @@ func everyBoundarySplitsNeighbours(count: Int) {
 private func f(_ name: String) -> URL { URL(fileURLWithPath: "/nonexistent/swivel/\(name)") }
 
 @Test(arguments: [[], ["a.png"], ["doc.pdf"], ["folder"], ["notes.txt"], ["a.png", "clip.mov"], ["x.unknownext"]])
-func imageSetForNonAVDrops(names: [String]) {
-    #expect(Geometry.slices(for: names.map(f)) == Geometry.sliceNames)
+func imageKindForNonAVDrops(names: [String]) {
+    #expect(Geometry.kind(for: names.map(f)) == .image)
 }
 
 @Test(arguments: ["clip.mov", "clip.mp4", "clip.m4v", "clip.mkv", "clip.avi", "CLIP.MOV"])
-func videoSetForMovies(name: String) {
-    #expect(Geometry.slices(for: [f(name)]) == ["MP4", "HEVC", "MOV", "GIF", "M4A", "WAV"])
+func videoKindForMovies(name: String) {
+    #expect(Geometry.kind(for: [f(name)]) == .video)
 }
 
 @Test(arguments: ["a.m4a", "a.wav", "a.mp3", "a.aiff", "a.flac"])
-func audioSetForAudio(name: String) {
-    #expect(Geometry.slices(for: [f(name)]) == ["M4A", "WAV"])
+func audioKindForAudio(name: String) {
+    #expect(Geometry.kind(for: [f(name)]) == .audio)
 }
 
-@Test func mixedDropTakesTheFirstFilesSet() {
-    #expect(Geometry.slices(for: [f("clip.mov"), f("a.png")]) == Geometry.videoSlices)
-    #expect(Geometry.slices(for: [f("a.m4a"), f("clip.mov")]) == Geometry.audioSlices)
+@Test func mixedDropTakesTheFirstFilesKind() {
+    #expect(Geometry.kind(for: [f("clip.mov"), f("a.png")]) == .video)
+    #expect(Geometry.kind(for: [f("a.m4a"), f("clip.mov")]) == .audio)
 }
 
-@Test func voiceOverLabelsPerSet() {
-    #expect(Geometry.videoSlices.map { Geometry.label(for: $0, in: Geometry.videoSlices) } == [
+@Test func defaultLayoutsPerKind() {
+    #expect(FileKind.image.known == ["PNG", "JPEG", "HEIC", "WebP", "TIFF", "PDF", "Text"])
+    #expect(FileKind.video.known == ["MP4", "HEVC", "MOV", "GIF", "M4A", "WAV"])
+    #expect(FileKind.audio.known == ["M4A", "WAV"])
+    #expect(FileKind.allCases.map(\.key) == ["wheel.image", "wheel.video", "wheel.audio"])
+}
+
+@Test func voiceOverLabelsPerKind() {
+    #expect(FileKind.video.known.map { Geometry.label(for: $0, kind: .video) } == [
         "Convert to MP4", "Convert to HEVC", "Convert to MOV", "Make GIF", "Extract audio as M4A", "Extract audio as WAV",
     ])
-    #expect(Geometry.audioSlices.map { Geometry.label(for: $0, in: Geometry.audioSlices) } == ["Convert to M4A", "Convert to WAV"])
-    #expect(Geometry.sliceNames.map { Geometry.label(for: $0, in: Geometry.sliceNames) } == [
+    #expect(FileKind.audio.known.map { Geometry.label(for: $0, kind: .audio) } == ["Convert to M4A", "Convert to WAV"])
+    #expect(FileKind.image.known.map { Geometry.label(for: $0, kind: .image) } == [
         "Convert to PNG", "Convert to JPEG", "Convert to HEIC", "Convert to WebP", "Convert to TIFF", "Convert to PDF", "Extract text",
     ])
+}
+
+// D3: the label follows the kind, not the list, so a trimmed or reordered video wheel still says "Extract audio".
+@Test(arguments: [["WAV", "M4A"], ["M4A", "WAV"], ["WAV"], ["GIF", "M4A"]])
+func videoAudioSlicesSayExtractInAnyLayout(layout: [String]) {
+    for name in layout where name == "M4A" || name == "WAV" {
+        #expect(Geometry.label(for: name, kind: .video) == "Extract audio as \(name)")
+    }
+}
+
+// MARK: User layouts (UserDefaults is untrusted: any local process can `defaults write`)
+
+/// A throwaway suite, removed after `body` so no test touches the real domain or another test's values (OV7).
+private func withSuite(_ body: (UserDefaults) -> Void) {
+    let name = "swivel.tests.\(UUID().uuidString)"
+    let suite = UserDefaults(suiteName: name)!
+    defer { suite.removePersistentDomain(forName: name) }
+    body(suite)
+}
+
+@Test func storedVideoLayoutIsUsedAndResetRestoresDefaults() {
+    withSuite { d in
+        d.set(["WAV", "MP4"], forKey: FileKind.video.key)
+        #expect(Geometry.slices(for: .video, defaults: d) == ["WAV", "MP4"])
+        #expect(Geometry.slices(for: .image, defaults: d) == FileKind.image.known)
+        #expect(Geometry.slices(for: .audio, defaults: d) == FileKind.audio.known)
+        d.removeObject(forKey: FileKind.video.key)
+        #expect(Geometry.slices(for: .video, defaults: d) == FileKind.video.known)
+    }
+}
+
+@Test(arguments: FileKind.allCases)
+func absentLayoutIsTheDefault(kind: FileKind) {
+    withSuite { d in #expect(Geometry.slices(for: kind, defaults: d) == kind.known) }
+}
+
+@Test(arguments: FileKind.allCases)
+func wrongTypeLayoutIsTheDefault(kind: FileKind) {
+    let values: [Any] = [42, "PNG", Data([1, 2]), [1, 2], ["PNG", 1] as [Any], ["PNG": "JPEG"]]
+    for value in values {
+        withSuite { d in
+            d.set(value, forKey: kind.key)
+            #expect(Geometry.slices(for: kind, defaults: d) == kind.known, "\(value)")
+        }
+    }
+}
+
+@Test(arguments: FileKind.allCases)
+func allHiddenLayoutIsTheDefault(kind: FileKind) {
+    withSuite { d in
+        d.set([String](), forKey: kind.key)
+        #expect(Geometry.slices(for: kind, defaults: d) == kind.known)
+    }
+}
+
+@Test func unknownWrongCaseOrOtherKindNamesAreTheDefault() {
+    withSuite { d in
+        d.set(["png", "BMP"], forKey: FileKind.image.key)
+        d.set(["MP4"], forKey: FileKind.audio.key)
+        #expect(Geometry.slices(for: .image, defaults: d) == FileKind.image.known)
+        #expect(Geometry.slices(for: .audio, defaults: d) == FileKind.audio.known)
+    }
+    withSuite { d in
+        d.set(["MP4"], forKey: FileKind.image.key)
+        #expect(Geometry.slices(for: .image, defaults: d) == FileKind.image.known)
+    }
+}
+
+@Test func unknownAndDuplicateNamesAreDroppedInOrder() {
+    #expect(Geometry.clean(["JPEG", "png", "JPEG", "BMP", "PDF"], known: FileKind.image.known) == ["JPEG", "PDF"])
+    withSuite { d in
+        d.set(["JPEG", "png", "JPEG", "BMP", "PDF"], forKey: FileKind.image.key)
+        #expect(Geometry.slices(for: .image, defaults: d) == ["JPEG", "PDF"])
+    }
+}
+
+@Test func oneVisibleSliceTakesTheWholeRing() {
+    withSuite { d in
+        d.set(["GIF"], forKey: FileKind.video.key)
+        let slices = Geometry.slices(for: .video, defaults: d)
+        #expect(slices == ["GIF"])
+        for degrees in stride(from: 0.0, to: 360, by: 15) {
+            #expect(slice(point(degrees), count: slices.count) == 0)
+        }
+    }
 }
 
 @Test(arguments: [0.0, 10, 29.9])

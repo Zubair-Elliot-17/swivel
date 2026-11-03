@@ -3,7 +3,7 @@ import os
 import SwivelCore
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let dragLine = NSMenuItem(title: "Drag: idle", action: nil, keyEquivalent: "")
     private let lastDropLine = NSMenuItem(title: "Last: none", action: nil, keyEquivalent: "")
@@ -18,6 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var drops: [UUID: Task<Void, Never>] = [:]  // running batches, for Cancel conversions
     private var lineOwner: UUID?  // the newest drop; only it writes the Last line and Reveal
     private var qaMode = false
+    private let defaults = AppDefaults.make(environment: ProcessInfo.processInfo.environment)
+    private lazy var settings = SettingsWindow(defaults: defaults)
+    private let loginItem = LoginItem()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -37,10 +40,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enableTapItem.target = self
         menu.addItem(enableTapItem)
         menu.addItem(.separator())
+        menu.addItem(loginItem.menuItem)
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
         menu.addItem(NSMenuItem(title: "Quit Swivel", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.delegate = self
         statusItem.menu = menu
+        NSApp.mainMenu = mainMenu()
 
-        let wheel = WheelPanel { [weak self] name, urls in self?.drop(name, urls) }
+        let wheel = WheelPanel(defaults: defaults) { [weak self] name, urls in self?.drop(name, urls) }
         let dragMonitor = DragMonitor(
             onState: { [dragLine] in dragLine.title = "Drag: \($0)" },
             onLive: { _ = wheel.hideClickMode() },
@@ -71,6 +80,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Key equivalents need a main menu: Cmd-, opens Settings and Cmd-W closes it while it is key.
+    private func mainMenu() -> NSMenu {
+        let appMenu = NSMenu()
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        appMenu.addItem(settingsItem)
+        appMenu.addItem(NSMenuItem(title: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
+        let appItem = NSMenuItem()
+        appItem.submenu = appMenu
+        let main = NSMenu()
+        main.addItem(appItem)
+        return main
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        loginItem.refresh()  // the user can change it in System Settings at any time
+    }
+
+    @objc private func openSettings() {
+        settings.show()
+    }
+
     @objc private func enableTap() {
         finderTap?.enable()
     }
@@ -81,7 +112,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let id = UUID()
         let job: @Sendable () async -> [Outcome]
         switch (ImageFormat(rawValue: name), AVTarget(rawValue: name), name) {
-        case (let format?, _, _): job = { await Converter.convertBatch(urls, to: format) }
+        case (let format?, _, _):
+            let quality = QualitySetting.read(defaults)  // once per drop, so a batch never mixes qualities
+            job = { await Converter.convertBatch(urls, to: format, quality: quality) }
         case (nil, let target?, _):
             let shown = OSAllocatedUnfairLock(initialState: "")  // last line posted, so only a new whole percent hops to main
             job = { [weak self] in

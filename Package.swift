@@ -11,5 +11,6 @@ let package = Package(
         .target(name: "SwivelCore", dependencies: [.product(name: "libwebp", package: "libwebp-Xcode")]),
         .executableTarget(name: "Swivel", dependencies: ["SwivelCore"]),
         .testTarget(name: "SwivelCoreTests", dependencies: ["SwivelCore", .product(name: "libwebp", package: "libwebp-Xcode")]),
+        .testTarget(name: "SwivelAppTests", dependencies: ["Swivel"]),
     ]
 )

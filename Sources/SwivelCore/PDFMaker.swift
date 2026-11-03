@@ -119,9 +119,9 @@ extension Converter {
         ![.none, .noneSkipFirst, .noneSkipLast].contains(image.alphaInfo)
     }
 
-    /// The frame re-encoded as JPEG q0.85 through the M2 encoder, so CG embeds the JPEG bytes.
+    /// The frame re-encoded as JPEG at the fixed default quality, never the setting (D4), so CG embeds the JPEG bytes.
     private static func jpegBacked(_ frame: CGImage) -> CGImage? {
-        guard let data = try? encode(frame, to: .jpeg), let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        guard let data = try? encode(frame, to: .jpeg, quality: defaultQuality), let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         return CGImageSourceCreateImageAtIndex(src, 0, nil)
     }
 }
