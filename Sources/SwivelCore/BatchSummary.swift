@@ -42,7 +42,8 @@ public struct BatchSummary {
     public let converted: Int, skipped: Int, failed: Int
     public let menuLine: String
 
-    public init(_ outcomes: [Outcome]) {
+    /// `notTrashed` sources that should have gone to the Trash but stayed add " (N not moved to Trash)".
+    public init(_ outcomes: [Outcome], notTrashed: Int = 0) {
         var outputs: [URL] = [], skips: [SkipReason] = [], failure: (URL, String)?, failed = 0, converted = 0
         for outcome in outcomes {
             switch outcome {
@@ -63,14 +64,17 @@ public struct BatchSummary {
 
         let total = outcomes.count
         let skipNote = skips.isEmpty ? "" : ", \(skips.count) skipped"
+        let trashNote = notTrashed > 0 ? " (\(notTrashed) not moved to Trash)" : ""
+        let line: String
         if let (source, reason) = failure {
-            menuLine = "Failed: \(source.lastPathComponent): \(reason) (\(converted) of \(total) converted\(skipNote))"
+            line = "Failed: \(source.lastPathComponent): \(reason) (\(converted) of \(total) converted\(skipNote))"
         } else if let last = outputs.last {
-            menuLine = "Last: \(last.lastPathComponent) (\(converted) of \(total)\(skipNote))"
+            line = "Last: \(last.lastPathComponent) (\(converted) of \(total)\(skipNote))"
         } else if let first = skips.first {
-            menuLine = "Skipped \(total) of \(total): \(first)"
+            line = "Skipped \(total) of \(total): \(first)"
         } else {
-            menuLine = "Last: none"
+            line = "Last: none"
         }
+        menuLine = line + trashNote
     }
 }

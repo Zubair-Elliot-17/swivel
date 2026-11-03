@@ -132,3 +132,34 @@ func avMenuReason(error: Error, expected: String) {
 func progressLineIsClamped(fraction: Double, expected: String) {
     #expect(progressLine(name: "clip.mov", fraction: fraction, index: 2, total: 5) == expected)
 }
+
+// MARK: not moved to Trash (M6)
+
+@Test(arguments: [
+    (allConverted, 0, "Last: photo.jpg (3 of 3)"),
+    (allConverted, 1, "Last: photo.jpg (3 of 3) (1 not moved to Trash)"),
+    (allConverted, 3, "Last: photo.jpg (3 of 3) (3 not moved to Trash)"),
+    (withFailure, 0, "Failed: photo.heic: disk full (1 of 3 converted)"),
+    (withFailure, 1, "Failed: photo.heic: disk full (1 of 3 converted) (1 not moved to Trash)"),
+    (mixed, 3, "Failed: photo.heic: read-only (1 of 3 converted, 1 skipped) (3 not moved to Trash)"),
+    (allSkipped, 0, "Skipped 3 of 3: already PNG"),
+    (allSkipped, 1, "Skipped 3 of 3: already PNG (1 not moved to Trash)"),
+    (allSkipped, 3, "Skipped 3 of 3: already PNG (3 not moved to Trash)"),
+])
+func notTrashedSuffix(outcomes: [Outcome], notTrashed: Int, expected: String) {
+    #expect(BatchSummary(outcomes, notTrashed: notTrashed).menuLine == expected)
+}
+
+@Test func notTrashedLeavesCountsAndOutputs() {
+    let plain = BatchSummary(withSkip), marked = BatchSummary(withSkip, notTrashed: 2)
+    #expect([marked.converted, marked.skipped, marked.failed] == [2, 1, 0] as [Int])
+    #expect([plain.converted, plain.skipped, plain.failed] == [2, 1, 0] as [Int])
+    #expect(marked.outputs == plain.outputs)
+}
+
+@Test func partialConversionCountsLikeAFullOne() {
+    let partial: [Outcome] = [.converted(source: url("multi.tiff"), outputs: [url("multi.png")], complete: false)]
+    let s = BatchSummary(partial)
+    #expect(s.menuLine == "Last: multi.png (1 of 1)")
+    #expect(s.converted == 1 && s.outputs == [url("multi.png")])
+}
