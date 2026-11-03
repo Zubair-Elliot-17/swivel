@@ -24,3 +24,24 @@ public struct DragTrigger {
         return edge || pending
     }
 }
+
+/// Which modifier opens the wheel (setting `triggerKeys`); `both` is the default.
+public enum TriggerKeys: String, CaseIterable, Sendable {
+    case shift, control, both
+
+    /// The stored value, cleaned: only an exact raw string counts, anything else is `both`.
+    public init(raw: Any?) {
+        self = (raw as? String).flatMap(TriggerKeys.init(rawValue:)) ?? .both
+    }
+
+    /// Keys as DragTrigger should see them: a disabled key reads up.
+    public func drag(shift: Bool, control: Bool) -> (shift: Bool, control: Bool) {
+        (shift && self != .control, control && self != .shift)
+    }
+
+    /// Keys as TapDetector should see them: a disabled key that is down counts as `other`, so it never taps.
+    public func tap(shift: Bool, control: Bool, other: Bool) -> (shift: Bool, control: Bool, other: Bool) {
+        let (s, c) = drag(shift: shift, control: control)
+        return (s, c, other || (shift && !s) || (control && !c))
+    }
+}
