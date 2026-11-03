@@ -130,7 +130,10 @@ extension Converter {
             default: try await export(source, to: target, remux: remux, progress: progress)
             }
             guard let output = made else { return skipped(source, .codec) }
-            return .converted(source: source, outputs: [output])
+            // WAV and the M4A preset can downmix or resample; measured on the output, so trash keeps a lossy one's original.
+            guard target == .wav || target == .m4a else { return .converted(source: source, outputs: [output]) }
+            let o = await probe(output)
+            return .converted(source: source, outputs: [output], complete: o.audioChannels >= p.audioChannels && o.audioRate >= p.audioRate)
         } catch {
             // Export may surface a cancel as its own error, so the task's state decides.
             if Task.isCancelled || error is CancellationError { return .failed(source: source, reason: "cancelled") }
