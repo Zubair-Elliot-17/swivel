@@ -10,12 +10,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let revealItem = NSMenuItem(title: "Reveal in Finder", action: #selector(reveal), keyEquivalent: "")
     private let cancelItem = NSMenuItem(title: "Cancel conversions", action: #selector(cancelConversions), keyEquivalent: "")
     private let tapLine = NSMenuItem(title: TapStatus.needsAccess.menuLine, action: nil, keyEquivalent: "")
-    private let enableTapItem = NSMenuItem(title: "Enable Shift-tap in Finder…", action: #selector(enableTap), keyEquivalent: "")
+    private let enableTapItem = NSMenuItem(title: "Enable tap in Finder…", action: #selector(enableTap), keyEquivalent: "")
     private var dragMonitor: DragMonitor?
     private var finderTap: FinderTap?
     private var revealTargets: [URL] = []
     private var busy = 0  // batches in flight; overlapping drops keep the icon busy until all finish
     private var drops: [UUID: Task<Void, Never>] = [:]  // running batches, for Cancel conversions
+    private var dropURLs: [UUID: [URL]] = [:]  // what each running batch uses, so trashing skips a file another drop holds
     private var lineOwner: UUID?  // the newest drop; only it writes the Last line and Reveal
     private var qaMode = false
     private let defaults = AppDefaults.make(environment: ProcessInfo.processInfo.environment)
@@ -51,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let wheel = WheelPanel(defaults: defaults) { [weak self] name, urls in self?.drop(name, urls) }
         let dragMonitor = DragMonitor(
+            defaults: defaults,
             onState: { [dragLine] in dragLine.title = "Drag: \($0)" },
             onLive: { _ = wheel.hideClickMode() },
             onTrigger: { wheel.show(at: $0) },
@@ -59,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.dragMonitor = dragMonitor
 
         // Tap path: the click wheel converts through the same drop(_:_:) as a drag.
-        let finderTap = FinderTap()
+        let finderTap = FinderTap(defaults: defaults)
         finderTap.isDragLive = { dragMonitor.isLive }
         finderTap.dismissWheel = { wheel.hideClickMode() }
         finderTap.onTap = { wheel.showForClick(at: $0, urls: $1) }
@@ -135,14 +137,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             log.info("drop on unknown slice \(name, privacy: .public)")
             return
         }
+        let trash = TrashSetting.read(defaults)  // once per drop, like quality
         busy += 1
         updateIcon()
         lineOwner = id
+        dropURLs[id] = urls
         drops[id] = Task { @MainActor in
             let outcomes = await job()
-            drops[id] = nil  // before the summary, so a late progress hop can't overwrite it
+            dropURLs[id] = nil
             for outcome in outcomes { logOutcome(outcome) }
-            let summary = BatchSummary(outcomes)
+            // Still in `drops` here, so Cancel during the trash step stops it.
+            let notTrashed = await TrashRun.afterBatch(outcomes, slice: name, enabled: trash) { self.dropURLs.values.flatMap { $0 } }
+            drops[id] = nil  // before the summary, so a late progress hop can't overwrite it
+            let summary = BatchSummary(outcomes, notTrashed: notTrashed)
             if lineOwner == id {
                 lastDropLine.title = summary.menuLine
                 revealTargets = summary.outputs
@@ -168,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func logOutcome(_ outcome: Outcome) {
         switch outcome {
-        case .converted(let source, let outputs):
+        case .converted(let source, let outputs, _):
             let names = outputs.map(\.lastPathComponent).joined(separator: ", ")
             log.info("converted \(source.lastPathComponent, privacy: .public) -> \(names, privacy: .public)")
         case .skipped(let source, let reason):

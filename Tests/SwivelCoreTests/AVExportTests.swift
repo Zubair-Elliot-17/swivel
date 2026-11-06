@@ -17,7 +17,7 @@ final class ProgressLog: Sendable {
 }
 
 private func output(_ outcome: Outcome) throws -> URL {
-    guard case .converted(_, let outputs) = outcome, outputs.count == 1 else { throw ConvertTestError("not converted: \(outcome)") }
+    guard case .converted(_, let outputs, _) = outcome, outputs.count == 1 else { throw ConvertTestError("not converted: \(outcome)") }
     return outputs[0]
 }
 
@@ -275,7 +275,7 @@ func cancelAtAnyPointNeverCrashesOrLeavesFiles(target: AVTarget) async throws {
         try await Task.sleep(for: .microseconds(delay))
         task.cancel()
         let outcome = await task.value
-        if case .converted(_, let outputs) = outcome { for url in outputs { try FileManager.default.removeItem(at: url) } } else {
+        if case .converted(_, let outputs, _) = outcome { for url in outputs { try FileManager.default.removeItem(at: url) } } else {
             #expect(outcome == .failed(source: src, reason: "cancelled"), "\(delay) µs: \(outcome)")
         }
         let left = try files(in: dir)

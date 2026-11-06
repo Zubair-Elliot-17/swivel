@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import SwivelCore
 
@@ -119,17 +120,17 @@ func tapRuleNamesTheFailingRule(_ name: String, _ i: RuleInput, _ expected: Stri
 }
 
 @Test(arguments: [
-    (Int32(0), "Shift-tap: ready"),
-    (-1744, "Shift-tap: allow Finder access"),
-    (-1743, "Shift-tap: denied, see System Settings > Automation"),
-    (-600, "Shift-tap: allow Finder access"),
+    (Int32(0), "Tap: ready"),
+    (-1744, "Tap: allow Finder access"),
+    (-1743, "Tap: denied, see System Settings > Automation"),
+    (-600, "Tap: allow Finder access"),
 ])
 func tapStatusFromPermission(_ code: Int32, _ line: String) {
     #expect(TapStatus(permission: code).menuLine == line)
 }
 
 @Test func nothingSelectedLine() {
-    #expect(TapStatus.nothingSelected.menuLine == "Shift-tap: nothing selected")
+    #expect(TapStatus.nothingSelected.menuLine == "Tap: nothing selected")
 }
 
 /// Click wheel open for `elapsed` s: a keyDown since then means Finder took the keys, so the wheel hides.
@@ -165,4 +166,73 @@ func lateRuleNamesTheFailingRule(_ name: String, _ i: LateInput, _ expected: Str
 /// VoiceOver keys (Ctrl+Opt+arrows) move its cursor onto the slices, so they must not hide the wheel.
 @Test func voiceOverKeysKeepWheel() {
     #expect(TapRule.keyTyped(sinceKeyDown: 0.5, elapsed: 1.0, voiceOver: true) == false)
+}
+
+// MARK: TriggerKeys (M6)
+
+@Test(arguments: [nil, "", "SHIFT", "Shift", " shift", "ctrl", "none", 1, true, ["shift"], Data("shift".utf8)] as [(any Sendable)?])
+func junkTriggerKeysReadAsBoth(_ raw: (any Sendable)?) {
+    #expect(TriggerKeys(raw: raw) == .both)
+}
+
+@Test(arguments: [("shift", TriggerKeys.shift), ("control", .control), ("both", .both)])
+func validTriggerKeysReadAsThemselves(_ raw: String, _ keys: TriggerKeys) {
+    #expect(TriggerKeys(raw: raw) == keys)
+    #expect(keys.rawValue == raw)
+}
+
+private func fires(_ keys: TriggerKeys, start: (Bool, Bool), _ ticks: [(Bool, Bool, Bool)]) -> [Int] {
+    let s = keys.drag(shift: start.0, control: start.1)
+    var trigger = DragTrigger(shift: s.shift, control: s.control)
+    return ticks.enumerated().filter {
+        let k = keys.drag(shift: $1.0, control: $1.1)
+        return trigger.tick(shift: k.shift, control: k.control, live: $1.2)
+    }.map(\.offset)
+}
+
+private func taps(_ keys: TriggerKeys, _ events: [(Bool, Bool, Bool, Double)]) -> [Tap] {
+    var detector = TapDetector()
+    return events.compactMap {
+        let k = keys.tap(shift: $0.0, control: $0.1, other: $0.2)
+        return detector.update(shift: k.shift, control: k.control, other: k.other, time: $0.3)
+    }
+}
+
+@Test(arguments: dragCases)
+func bothKeysDragAsToday(_ c: DragCase) {
+    #expect(fires(.both, start: c.start, c.ticks) == c.fires)
+}
+
+@Test(arguments: tapCases)
+func bothKeysTapAsToday(_ c: TapCase) {
+    #expect(taps(.both, c.events) == c.taps)
+}
+
+@Test func controlOnlyDrag() {
+    #expect(fires(.control, start: (false, false), [(false, false, true), (true, false, true), (true, false, true)]).isEmpty)
+    #expect(fires(.control, start: (false, false), [(false, false, true), (false, true, true)]) == [1])
+    #expect(fires(.control, start: (true, false), [(true, false, true), (true, true, true)]) == [1])
+}
+
+@Test func shiftOnlyDrag() {
+    #expect(fires(.shift, start: (false, false), [(false, false, true), (false, true, true), (false, true, true)]).isEmpty)
+    #expect(fires(.shift, start: (false, false), [(false, false, true), (true, false, true)]) == [1])
+    #expect(fires(.shift, start: (false, true), [(false, true, true), (true, true, true)]) == [1])
+}
+
+private let shiftTap: [(Bool, Bool, Bool, Double)] = [(true, false, false, 1), (false, false, false, 1.25)]
+private let ctrlTap: [(Bool, Bool, Bool, Double)] = [(false, true, false, 1), (false, false, false, 1.25)]
+private let chord: [(Bool, Bool, Bool, Double)] = [(true, false, false, 1), (true, true, false, 1.1), (false, true, false, 1.2),
+                                                   (false, false, false, 1.3)]
+
+@Test func controlOnlyTap() {
+    #expect(taps(.control, shiftTap).isEmpty)
+    #expect(taps(.control, ctrlTap) == [Tap(held: 0.25)])
+    #expect(taps(.control, chord).isEmpty)
+}
+
+@Test func shiftOnlyTap() {
+    #expect(taps(.shift, ctrlTap).isEmpty)
+    #expect(taps(.shift, shiftTap) == [Tap(held: 0.25)])
+    #expect(taps(.shift, chord).isEmpty)
 }

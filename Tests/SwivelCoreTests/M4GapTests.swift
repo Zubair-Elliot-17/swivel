@@ -102,7 +102,7 @@ func wavKeepsRateAndClampsChannels(name: String, rate: Double, channels: AVAudio
     let p = await Converter.probe(src)
     #expect(p.audioRate == rate && p.audioChannels == channels, "probe \(p.audioRate) \(p.audioChannels)")
     let outcome = await Converter.convertAV(src, to: .wav)
-    guard case .converted(_, let outputs) = outcome, let out = outputs.first else { Issue.record("\(outcome)"); return }
+    guard case .converted(_, let outputs, _) = outcome, let out = outputs.first else { Issue.record("\(outcome)"); return }
     let asbd = try await wavFormatOf(out)
     #expect(asbd.mSampleRate == rate)
     #expect(asbd.mChannelsPerFrame == expected)

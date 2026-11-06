@@ -38,6 +38,8 @@ public struct AVProbe: Sendable {
     public var videoSize = CGSize.zero
     public var audioRate = 0.0
     public var audioChannels: UInt32 = 0
+    /// Every track, so an output can be checked for dropped ones; the singles above are the first audio track.
+    public var videoTracks = 0, audioTracks: [(rate: Double, channels: UInt32)] = []
 
     public init() {}
 }
@@ -106,6 +108,12 @@ func wavTooLarge(duration: Double, rate: Double, channels: Int) -> Bool {
     duration * rate * Double(channels) * 2 >= 4 * 1024 * 1024 * 1024
 }
 
+/// Pure: `out` kept every audio track with its channels and rate and, when `video`, every video track.
+func keepsTracks(_ src: AVProbe, _ out: AVProbe, video: Bool) -> Bool {
+    out.audioTracks.count >= src.audioTracks.count && (!video || out.videoTracks >= src.videoTracks)
+        && zip(src.audioTracks, out.audioTracks).allSatisfy { $1.channels >= $0.channels && $1.rate >= $0.rate }
+}
+
 private func fourCC(_ s: String) -> FourCharCode { s.utf8.reduce(0) { $0 << 8 | FourCharCode($1) } }
 
 extension Converter {
@@ -130,7 +138,9 @@ extension Converter {
             default: try await export(source, to: target, remux: remux, progress: progress)
             }
             guard let output = made else { return skipped(source, .codec) }
-            return .converted(source: source, outputs: [output])
+            // Measured on the output (no preset tables), so trash keeps the original of one that dropped a track, channels or rate.
+            guard target != .gif else { return .converted(source: source, outputs: [output]) }
+            return .converted(source: source, outputs: [output], complete: keepsTracks(p, await probe(output), video: target.needsVideo))
         } catch {
             // Export may surface a cancel as its own error, so the task's state decides.
             if Task.isCancelled || error is CancellationError { return .failed(source: source, reason: "cancelled") }
@@ -255,21 +265,23 @@ extension Converter {
         do {
             let (playable, protected, duration) = try await asset.load(.isPlayable, .hasProtectedContent, .duration)
             (p.playable, p.protected, p.duration) = (playable, protected, duration.seconds)
-            if let video = try await asset.loadTracks(withMediaType: .video).first {
+            let videos = try await asset.loadTracks(withMediaType: .video)
+            p.videoTracks = videos.count
+            if let video = videos.first {
                 p.hasVideo = true
                 let (size, transform, formats, range) = try await video.load(.naturalSize, .preferredTransform, .formatDescriptions, .timeRange)
                 p.videoSize = size.applying(transform)
                 (p.videoStart, p.videoDuration) = (range.start.seconds, range.duration.seconds)
                 p.videoCodec = formats.first.map(CMFormatDescriptionGetMediaSubType)
             }
-            if let audio = try await asset.loadTracks(withMediaType: .audio).first {
+            for audio in try await asset.loadTracks(withMediaType: .audio) {
+                let format = try await audio.load(.formatDescriptions).first
+                let asbd = format.flatMap { CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee }
+                p.audioTracks.append((asbd?.mSampleRate ?? 0, asbd?.mChannelsPerFrame ?? 0))
+                guard !p.hasAudio else { continue }
                 p.hasAudio = true
-                if let format = try await audio.load(.formatDescriptions).first {
-                    p.audioCodec = CMFormatDescriptionGetMediaSubType(format)
-                    if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee {
-                        (p.audioRate, p.audioChannels) = (asbd.mSampleRate, asbd.mChannelsPerFrame)
-                    }
-                }
+                p.audioCodec = format.map(CMFormatDescriptionGetMediaSubType)
+                if let asbd { (p.audioRate, p.audioChannels) = (asbd.mSampleRate, asbd.mChannelsPerFrame) }
             }
             p.opened = true
         } catch {

@@ -119,3 +119,23 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **A failed Open at Login is only logged** (`LoginItem.swift` click): `register()` errors (e.g. bad signature) leave the item unchecked with no explanation; show a short alert or a menu line.
 - **OCR never checks cancellation** (`TextExtract.swift` extractText page loop, pre-M5): Cancel conversions doesn't stop a 100-page OCR; check `Task.isCancelled` between pages.
 - **QA suite switch reads `SWIVEL_QA` alone** (`AppDefaults.swift` suiteName): also require `--qa-drop`, so a leaked env var can't point the normal app at the suite qa.sh wipes.
+
+## M6 trash and trigger (P3)
+- **Trash runs on the main actor** (`TrashRun.run`): fine for local volumes; a big batch on a slow network share could stall the menu. Move it off main if that shows up.
+- **iPhone HEIC with aux or burst images** may report more than one frame and so never be trashed (safe); not checked on a real burst.
+- **Video→video can drop subtitle, chapter, timecode and metadata tracks unchecked** (`AVConvert.swift` `keepsTracks`): audio and video tracks are compared; README warns about the rest. Comparing track counts by media type would catch them.
+- **One unreadable later audio track now skips the whole file** (`AVConvert.swift:277-278` probe): every audio track's format is loaded with `try`; use `try?` for tracks after the first and record (0,0), as before M6.
+- **Tracks are paired by position** (`AVConvert.swift:112-115` `keepsTracks`): an export that reorders audio tracks would read as partial (safe: original kept); sort both lists by (channels, rate) if it ever shows up.
+- **No Ctrl drag in macui** (`ev` has no `ctrldown`): the Control-only drag is covered by pure tests; add `ctrldown/ctrlup` to drive it.
+- **Duplicate sources keep the first outcome's outputs** (`Trash.trashCandidates`): the exists check looks at those only; fine since every copy converted the same file.
+- **Combined-PDF `catch where drawn > 0` untested, mutant survived** (`PDFMaker.swift:91-96`): unreachable from files (14 broken TIFFs tried; frame-read failures also fail the pixelSize precheck); add a frame-read seam if it ever becomes reachable.
+- **EXIF/GPS lost for WebP and combined PDF before the original is trashed** (`Converter.swift:136`, `PDFMaker.swift`): the trashed original was the only copy of that metadata.
+- **Source replaced at the same path between conversion and trash** (atomic save, sync) is trashed unchecked (`TrashRun.swift:31`): compare fileResourceIdentifier + modification date from conversion time.
+- **Symlinked source trash behaviour not pinned** (`TrashRun.swift:51`): untested whether the link or its target goes; consider skipping symlinks.
+- **In-use and dedupe compare standardized paths only** (`TrashRun.swift:24`, `Trash.swift:17`): /var vs /private/var and case differences slip through; use fileResourceIdentifier.
+- **qa.sh trust checks** (`scripts/qa.sh:10`, `:228-230`): assert $MNT is a separate mounted volume (`stat -f %d`), and make tdrop reject `/../` and paths off the image.
+- **Pre-existing: full drop paths logged with privacy .public** (`main.swift:113`).
+- **main.swift trash wiring has no app-level test** (`main.swift:140-150`): cancel between job() and trash and the busy bookkeeping are unit-covered via TrashRun only.
+
+
+- Settings picker label is spoken twice by VoiceOver ("Open the wheel with, Open the wheel with Shift or Control pop up button"); drop the extra label (M6-M2, P3).

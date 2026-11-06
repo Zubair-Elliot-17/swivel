@@ -17,6 +17,7 @@ final class FinderTap {
     var onStatus: (TapStatus) -> Void = { _ in }
     private(set) var status = TapStatus.needsAccess
     private var detector = TapDetector()
+    private let defaults: UserDefaults
     private var checking = false
     // Runs on main: a hung Finder must fail fast (-1712) instead of the 2-minute default AE timeout.
     private lazy var script = NSAppleScript(source: """
@@ -30,7 +31,8 @@ final class FinderTap {
         return out
         """)
 
-    init() {
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
         NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             MainActor.assumeIsolated { self?.flagsChanged(event) }
         }
@@ -55,9 +57,11 @@ final class FinderTap {
 
     private func flagsChanged(_ event: NSEvent) {
         let flags = event.modifierFlags
-        guard let tap = detector.update(
+        // Read per event: a disabled trigger key counts as another modifier, so it never taps.
+        let keys = TriggerSetting.read(defaults).tap(
             shift: flags.contains(.shift), control: flags.contains(.control),
-            other: !flags.intersection([.command, .option, .function]).isEmpty, time: event.timestamp)
+            other: !flags.intersection([.command, .option, .function]).isEmpty)
+        guard let tap = detector.update(shift: keys.shift, control: keys.control, other: keys.other, time: event.timestamp)
         else { return }
         if dismissWheel() { return }
         if let rule = TapRule.rejection(

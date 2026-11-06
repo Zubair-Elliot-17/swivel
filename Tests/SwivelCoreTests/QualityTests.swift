@@ -70,7 +70,7 @@ private func output(_ target: ImageFormat, quality: Double?, make: (URL) throws 
     let source = try make(dir)
     let outcomes = if let quality { await Converter.convertBatch([source], to: target, quality: quality) }
         else { await Converter.convertBatch([source], to: target) }
-    guard case .converted(_, let outputs) = outcomes.first, let url = outputs.first else {
+    guard case .converted(_, let outputs, _) = outcomes.first, let url = outputs.first else {
         Issue.record("not converted: \(outcomes)"); return Data()
     }
     return try Data(contentsOf: url)
@@ -122,7 +122,7 @@ private func noisyPDF(in dir: URL) throws -> URL {
 @Test func combinedPDFEmbedsFramesAtFixedQuality() async throws {
     let dir = try makeScratch()
     defer { cleanUp(dir) }
-    guard case .converted(_, let made) = await Converter.convert(try noisy(in: dir), to: .heic, quality: 0.5),
+    guard case .converted(_, let made, _) = await Converter.convert(try noisy(in: dir), to: .heic, quality: 0.5),
           let heic = made.first else { Issue.record("fixture failed"); return }
     _ = await Converter.makePDF([heic])
     let pdf = try Data(contentsOf: dir.appendingPathComponent("noise.pdf"))

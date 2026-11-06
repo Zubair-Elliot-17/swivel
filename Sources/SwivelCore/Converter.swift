@@ -34,7 +34,8 @@ public enum Converter {
         }
         do {
             let data = try encode(src!, to: target, quality: quality)
-            return .converted(source: source, outputs: [try claim(data, source: source, ext: target.fileExtension)])
+            // Only the primary frame is encoded, so extra frames make it partial.
+            return .converted(source: source, outputs: [try claim(data, source: source, ext: target.fileExtension)], complete: count <= 1)
         } catch {
             return failed(source, error)
         }

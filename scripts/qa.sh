@@ -219,5 +219,85 @@ qdrop m54-low HEIC a.jpg heic -float 0.5
 less "M5-4 q0.5 < absent" "$SIZE" "$abs"
 defaults delete $QA 2>/dev/null || true
 
+# M6: Move original to Trash. Trash rows run only on a writable throwaway image at $MNT, never a real folder or ~/.Trash.
+hdiutil detach -quiet "$MNT"
+hdiutil create -quiet -size 40m -fs APFS -volname SwivelQA rw.dmg
+hdiutil attach -quiet -nobrowse -mountpoint "$MNT" rw.dmg
+T="$MNT/.Trashes/$(id -u)"  # the image's own Trash; every trashed name below is unique so a hit can't be stale
+# tdrop <slice> <path>...: like drop, but refuses any path outside $MNT.
+tdrop() {
+  local p
+  for p in "${@:2}"; do [[ "$p" == "$MNT/"* ]] || { echo "tdrop: $p is outside \$MNT"; return 1; }; done
+  drop "$@"
+}
+# trashed <row> <path>: gone from its folder and in the image's Trash; kept <row> <path>: still there.
+trashed() { [ ! -e "$2" ] && [ -e "$T/$(basename "$2")" ] && pass "$1 trashed" || fail "$1" "$(basename "$2") not in the Trash"; }
+kept() { [ -e "$2" ] && pass "$1 kept" || fail "$1" "$(basename "$2") is gone"; }
+tfresh() { local d="$MNT/$1"; shift; mkdir "$d" && cp "$@" "$d/"; }
+
+# M6-1: setting absent: nothing moves.
+tfresh m61 a.jpg
+expect M6-1 "$(tdrop PNG "$MNT/m61/a.jpg")" "Last: a.png (1 of 1)"
+kept M6-1 "$MNT/m61/a.jpg"
+
+defaults write $QA trashOriginal -bool true
+# M6-2: conversions trash the source; outputs stay.
+mkdir "$MNT/m62" && cp a.jpg "$MNT/m62/m62.jpg" && cp doc.pdf clip.mov voice.wav "$MNT/m62/"
+expect "M6-2 image" "$(tdrop PNG "$MNT/m62/m62.jpg")" "Last: m62.png (1 of 1)"
+line=$(tdrop JPEG "$MNT/m62/doc.pdf")
+[[ "$line" == "Last: doc page "*".jpg (1 of 1)" ]] && pass "M6-2 pdf ($line)" || fail "M6-2 pdf" "got '$line'"
+expect "M6-2 video" "$(tdrop MP4 "$MNT/m62/clip.mov")" "Last: clip.mp4 (1 of 1)"
+expect "M6-2 audio" "$(tdrop M4A "$MNT/m62/voice.wav")" "Last: voice.m4a (1 of 1)"
+for f in m62.jpg doc.pdf clip.mov voice.wav; do trashed "M6-2 $f" "$MNT/m62/$f"; done
+[ -e "$MNT/m62/m62.png" ] && [ -e "$MNT/m62/clip.mp4" ] && [ -e "$MNT/m62/voice.m4a" ] \
+  && [ "$(ls "$MNT/m62" | grep -c '^doc page .*\.jpg$')" = "$N" ] && pass "M6-2 outputs" || fail "M6-2 outputs" "$(ls "$MNT/m62" | tr '\n' ' ')"
+
+# M6-3: extractions keep the original.
+tfresh m63 shot.png clip.mov voice.mp4
+expect "M6-3 text" "$(tdrop Text "$MNT/m63/shot.png")" "Last: shot.txt (1 of 1)"
+expect "M6-3 gif" "$(tdrop GIF "$MNT/m63/clip.mov")" "Last: clip.gif (1 of 1)"
+expect "M6-3 m4a" "$(tdrop M4A "$MNT/m63/clip.mov")" "Last: clip.m4a (1 of 1)"
+expect "M6-3 audio mp4" "$(tdrop M4A "$MNT/m63/voice.mp4")" "Last: voice.m4a (1 of 1)"
+for f in shot.png clip.mov voice.mp4; do kept "M6-3 $f" "$MNT/m63/$f"; done
+
+# M6-4: a combined PDF trashes its images; the skipped folder stays.
+mkdir -p "$MNT/m64/folder" && cp a.jpg "$MNT/m64/p64.jpg" && cp b.heic "$MNT/m64/q64.heic"
+expect M6-4 "$(tdrop PDF "$MNT/m64/p64.jpg" "$MNT/m64/q64.heic" "$MNT/m64/folder")" "Last: p64.pdf (2 of 3, 1 skipped)"
+trashed "M6-4 p64.jpg" "$MNT/m64/p64.jpg"; trashed "M6-4 q64.heic" "$MNT/m64/q64.heic"; kept "M6-4 folder" "$MNT/m64/folder"
+
+# M6-5: a partial conversion (2-frame TIFF) and skipped files stay.
+sips -s format tiff a.jpg --out f1.tiff >/dev/null && sips -s format tiff c.jpg --out f2.tiff >/dev/null
+tiffutil -cat f1.tiff f2.tiff -out two.tiff 2>/dev/null
+tfresh m65 two.tiff locked.pdf bad.mp4
+expect "M6-5 tiff" "$(tdrop PNG "$MNT/m65/two.tiff")" "Last: two.png (1 of 1)"
+expect "M6-5 locked" "$(tdrop PNG "$MNT/m65/locked.pdf")" "Skipped 1 of 1: password protected"
+expect "M6-5 bad" "$(tdrop MP4 "$MNT/m65/bad.mp4")" "Skipped 1 of 1: not supported by macOS"
+for f in two.tiff locked.pdf bad.mp4; do kept "M6-5 $f" "$MNT/m65/$f"; done
+
+# M6-6: the same file twice in one drop is trashed once, with no failure.
+mkdir "$MNT/m66" && cp a.jpg "$MNT/m66/r66.jpg"
+# Both copies convert in parallel, so either one may claim "r66 2.png"; the line names whichever is last in drop order.
+line=$(tdrop PNG "$MNT/m66/r66.jpg" "$MNT/m66/r66.jpg")
+[[ "$line" == "Last: r66.png (2 of 2)" || "$line" == "Last: r66 2.png (2 of 2)" ]] && [ -e "$MNT/m66/r66.png" ] && [ -e "$MNT/m66/r66 2.png" ] \
+  && pass "M6-6 ($line)" || fail M6-6 "got '$line', $(ls "$MNT/m66" | tr '\n' ' ')"
+trashed M6-6 "$MNT/m66/r66.jpg"
+
+# M6-7: junk values read as off.
+mkdir "$MNT/m67" && cp a.jpg "$MNT/m67/s67.jpg"
+defaults write $QA trashOriginal -string YES
+expect "M6-7 YES" "$(tdrop PNG "$MNT/m67/s67.jpg")" "Last: s67.png (1 of 1)"
+kept "M6-7 YES" "$MNT/m67/s67.jpg"
+defaults write $QA trashOriginal -int 2
+expect "M6-7 2" "$(tdrop PNG "$MNT/m67/s67.jpg")" "Last: s67 2.png (1 of 1)"
+kept "M6-7 2" "$MNT/m67/s67.jpg"
+
+# M6-8: a locked source can't be trashed (probed: trashItem refuses uchg), so it stays and counts.
+defaults write $QA trashOriginal -bool true
+mkdir "$MNT/m68" && cp a.jpg "$MNT/m68/u68.jpg" && chflags uchg "$MNT/m68/u68.jpg"
+expect M6-8 "$(tdrop PNG "$MNT/m68/u68.jpg")" "Last: u68.png (1 of 1) (1 not moved to Trash)"
+kept M6-8 "$MNT/m68/u68.jpg"
+chflags nouchg "$MNT/m68/u68.jpg"
+defaults delete $QA 2>/dev/null || true
+
 echo "$fails failed"
 exit $((fails > 0))

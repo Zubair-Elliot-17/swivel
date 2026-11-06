@@ -4,7 +4,8 @@ import Foundation
 /// Result of converting one dropped file.
 public enum Outcome: Equatable, Sendable {
     /// A PDF source gives one output per page; every source of a combined PDF carries the same output.
-    case converted(source: URL, outputs: [URL])
+    /// `complete` is false when only part of the source made it out (extra frames, page or pixel caps, an AV track, channels or rate dropped).
+    case converted(source: URL, outputs: [URL], complete: Bool = true)
     case skipped(source: URL, SkipReason)
     /// `reason` is short for the menu; `detail` is the full error text for the log when it differs.
     case failed(source: URL, reason: String, detail: String? = nil)
@@ -41,11 +42,12 @@ public struct BatchSummary {
     public let converted: Int, skipped: Int, failed: Int
     public let menuLine: String
 
-    public init(_ outcomes: [Outcome]) {
+    /// `notTrashed` sources that should have gone to the Trash but stayed add " (N not moved to Trash)".
+    public init(_ outcomes: [Outcome], notTrashed: Int = 0) {
         var outputs: [URL] = [], skips: [SkipReason] = [], failure: (URL, String)?, failed = 0, converted = 0
         for outcome in outcomes {
             switch outcome {
-            case .converted(_, let urls):
+            case .converted(_, let urls, _):
                 converted += 1
                 // De-duplicated in first-seen order, so Reveal selects a combined PDF once.
                 for url in urls where !outputs.contains(url) { outputs.append(url) }
@@ -62,14 +64,17 @@ public struct BatchSummary {
 
         let total = outcomes.count
         let skipNote = skips.isEmpty ? "" : ", \(skips.count) skipped"
+        let trashNote = notTrashed > 0 ? " (\(notTrashed) not moved to Trash)" : ""
+        let line: String
         if let (source, reason) = failure {
-            menuLine = "Failed: \(source.lastPathComponent): \(reason) (\(converted) of \(total) converted\(skipNote))"
+            line = "Failed: \(source.lastPathComponent): \(reason) (\(converted) of \(total) converted\(skipNote))"
         } else if let last = outputs.last {
-            menuLine = "Last: \(last.lastPathComponent) (\(converted) of \(total)\(skipNote))"
+            line = "Last: \(last.lastPathComponent) (\(converted) of \(total)\(skipNote))"
         } else if let first = skips.first {
-            menuLine = "Skipped \(total) of \(total): \(first)"
+            line = "Skipped \(total) of \(total): \(first)"
         } else {
-            menuLine = "Last: none"
+            line = "Last: none"
         }
+        menuLine = line + trashNote
     }
 }

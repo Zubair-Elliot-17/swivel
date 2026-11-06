@@ -13,13 +13,16 @@ final class DragMonitor {
     private let onTrigger: (NSPoint) -> Void
     private let onEnd: () -> Void
     private let pasteboard = NSPasteboard(name: .drag)
+    private let defaults: UserDefaults
+    private var keys = TriggerKeys.both  // read at mouse-down, so a change mid-drag waits for the next drag
     private var startCount = 0
     private var timer: Timer?
     private var trigger = DragTrigger(shift: false, control: false)
     private(set) var isLive = false
 
-    init(onState: @escaping (String) -> Void, onLive: @escaping () -> Void, onTrigger: @escaping (NSPoint) -> Void,
-         onEnd: @escaping () -> Void) {
+    init(defaults: UserDefaults, onState: @escaping (String) -> Void, onLive: @escaping () -> Void,
+         onTrigger: @escaping (NSPoint) -> Void, onEnd: @escaping () -> Void) {
+        self.defaults = defaults
         self.onState = onState
         self.onLive = onLive
         self.onTrigger = onTrigger
@@ -37,8 +40,10 @@ final class DragMonitor {
         end()
         startCount = pasteboard.changeCount
         // Baseline at mouse-down so Shift held from a multi-select never fires (D2).
+        keys = TriggerSetting.read(defaults)
         let flags = CGEventSource.flagsState(.combinedSessionState)
-        trigger = DragTrigger(shift: flags.contains(.maskShift), control: flags.contains(.maskControl))
+        let down = keys.drag(shift: flags.contains(.maskShift), control: flags.contains(.maskControl))
+        trigger = DragTrigger(shift: down.shift, control: down.control)
         // Common mode keeps polling while a run loop is in event tracking.
         let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
@@ -60,7 +65,8 @@ final class DragMonitor {
             }
         }
         let flags = CGEventSource.flagsState(.combinedSessionState)
-        if trigger.tick(shift: flags.contains(.maskShift), control: flags.contains(.maskControl), live: isLive) {
+        let down = keys.drag(shift: flags.contains(.maskShift), control: flags.contains(.maskControl))
+        if trigger.tick(shift: down.shift, control: down.control, live: isLive) {
             log.info("trigger")
             setState("wheel requested")
             onTrigger(NSEvent.mouseLocation)

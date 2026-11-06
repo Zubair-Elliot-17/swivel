@@ -36,7 +36,7 @@ func extremeRateSourceConvertsToWAV(rate: Double, expected: Double) async throws
     let p = await Converter.probe(src)
     #expect(p.audioRate == rate, "\(p)")
     let outcome = await Converter.convertAV(src, to: .wav)
-    guard case .converted(_, let outputs) = outcome, let out = outputs.first else { Issue.record("\(outcome)"); return }
+    guard case .converted(_, let outputs, _) = outcome, let out = outputs.first else { Issue.record("\(outcome)"); return }
     #expect(try await wavFormatOf(out).mSampleRate == expected)
     #expect(abs(try await AVURLAsset(url: out).load(.duration).seconds - 1) < 0.05)
     #expect(try files(in: dir) == ["tone.caf", "tone.wav"])
@@ -51,7 +51,7 @@ func extremeRateSourceConvertsToWAV(rate: Double, expected: Double) async throws
     let src = try await AVFixture.write("short.mov", in: dir, seconds: 1, audioSeconds: 6)
     #expect(abs(try await AVFixture.duration(src) - 6) < 0.05)
     let outcome = await Converter.convertAV(src, to: .gif)
-    guard case .converted(_, let outputs) = outcome, let out = outputs.first else { Issue.record("\(outcome)"); return }
+    guard case .converted(_, let outputs, _) = outcome, let out = outputs.first else { Issue.record("\(outcome)"); return }
     let gif = try #require(CGImageSourceCreateWithURL(out as CFURL, nil))
     #expect(CGImageSourceGetCount(gif) == 10)
     try expectNoTemp(dir)
@@ -86,7 +86,7 @@ func extremeRateSourceConvertsToWAV(rate: Double, expected: Double) async throws
         try await Task.sleep(for: .microseconds(delay))
         task.cancel()
         let outcomes = await task.value
-        if case .converted(_, let outputs) = outcomes[0] {
+        if case .converted(_, let outputs, _) = outcomes[0] {
             #expect(outcomes == urls.map { .converted(source: $0, outputs: outputs) }, "\(delay) µs")
             for url in outputs { try FileManager.default.removeItem(at: url) }
         } else {
