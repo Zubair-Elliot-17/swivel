@@ -137,3 +137,5 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **Pre-existing: full drop paths logged with privacy .public** (`main.swift:113`).
 - **main.swift trash wiring has no app-level test** (`main.swift:140-150`): cancel between job() and trash and the busy bookkeeping are unit-covered via TrashRun only.
 
+
+- Settings picker label is spoken twice by VoiceOver ("Open the wheel with, Open the wheel with Shift or Control pop up button"); drop the extra label (M6-M2, P3).
