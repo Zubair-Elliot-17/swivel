@@ -297,6 +297,15 @@ mkdir "$MNT/m68" && cp a.jpg "$MNT/m68/u68.jpg" && chflags uchg "$MNT/m68/u68.jp
 expect M6-8 "$(tdrop PNG "$MNT/m68/u68.jpg")" "Last: u68.png (1 of 1) (1 not moved to Trash)"
 kept M6-8 "$MNT/m68/u68.jpg"
 chflags nouchg "$MNT/m68/u68.jpg"
+
+# M6-M1 stand-in for an SMB share: a writable FAT volume whose '.Trashes' is a plain file, so trashItem refuses it.
+hdiutil detach -quiet "$MNT"
+hdiutil create -quiet -size 20m -fs MS-DOS -volname SWNOTRASH nt.dmg
+hdiutil attach -quiet -nobrowse -mountpoint "$MNT" nt.dmg
+touch "$MNT/.Trashes" && cp a.jpg "$MNT/n61.jpg"
+expect M6-M1 "$(tdrop PNG "$MNT/n61.jpg")" "Last: n61.png (1 of 1) (1 not moved to Trash)"
+kept M6-M1 "$MNT/n61.jpg"
+[ -e "$MNT/n61.png" ] && pass "M6-M1 output" || fail M6-M1 "n61.png not written"
 defaults delete $QA 2>/dev/null || true
 
 echo "$fails failed"
