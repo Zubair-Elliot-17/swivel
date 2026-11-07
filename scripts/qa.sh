@@ -308,5 +308,8 @@ kept M6-M1 "$MNT/n61.jpg"
 [ -e "$MNT/n61.png" ] && pass "M6-M1 output" || fail M6-M1 "n61.png not written"
 defaults delete $QA 2>/dev/null || true
 
+# M7-1: the bundle QA tests is the one that ships: hardened runtime, apple-events entitlement, Swivel Dev DR.
+out=$("$ROOT/scripts/check-app.sh" sign "$ROOT/build/Swivel.app") && pass M7-1 || fail M7-1 "$(echo $out)"
+
 echo "$fails failed"
 exit $((fails > 0))

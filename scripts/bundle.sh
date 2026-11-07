@@ -25,5 +25,6 @@ PLIST
 # A stable identity keeps privacy grants across rebuilds; ad hoc changes every build.
 IDENTITY=-
 security find-identity -p codesigning | grep -q '"Swivel Dev"' && IDENTITY="Swivel Dev"
-codesign --force -s "$IDENTITY" "$APP"
+# Hardened runtime blocks Apple events unless entitled; without it the Finder tap fails silently (-1743).
+codesign --force --options runtime --entitlements assets/Swivel.entitlements -s "$IDENTITY" "$APP"
 echo "Built $APP (signed: $IDENTITY)"
