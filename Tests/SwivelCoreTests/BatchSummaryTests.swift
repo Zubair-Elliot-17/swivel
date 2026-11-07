@@ -194,3 +194,10 @@ func menuNameOfNothingVisibleIsFile(_ name: String) {
     // Reveal still gets the real URL.
     #expect(BatchSummary([.converted(source: rlo, outputs: [lf])]).outputs == [lf])
 }
+
+// M7 review F2: an error's text can quote a file name, so the reason gets the same cleaning.
+@Test func failedReasonUsesMenuName() {
+    let quoted = NSError(domain: "x", code: 1, userInfo: [NSLocalizedDescriptionKey: "can't open x\u{202E}gnp.exe\nnow"])
+    #expect(BatchSummary([.failed(source: url("a.png"), reason: menuReason(for: quoted))]).menuLine
+        == "Failed: a.png: can't open xgnp.exenow (0 of 1 converted)")
+}

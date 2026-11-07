@@ -78,7 +78,7 @@ public struct BatchSummary {
         let trashNote = notTrashed > 0 ? " (\(notTrashed) not moved to Trash)" : ""
         let line: String
         if let (source, reason) = failure {
-            line = "Failed: \(menuName(source.lastPathComponent)): \(reason) (\(converted) of \(total) converted\(skipNote))"
+            line = "Failed: \(menuName(source.lastPathComponent)): \(menuName(reason)) (\(converted) of \(total) converted\(skipNote))"
         } else if let last = outputs.last {
             line = "Last: \(menuName(last.lastPathComponent)) (\(converted) of \(total)\(skipNote))"
         } else if let first = skips.first {
