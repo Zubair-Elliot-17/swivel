@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var drops: [UUID: Task<Void, Never>] = [:]  // running batches, for Cancel conversions
     private var dropURLs: [UUID: [URL]] = [:]  // what each running batch uses, so trashing skips a file another drop holds
     private var lineOwner: UUID?  // the newest drop; only it writes the Last line and Reveal
+    private var cancelling = false  // after Cancel conversions, until all batches end or a new drop starts
     private var qaMode = false
     private let defaults = AppDefaults.make(environment: ProcessInfo.processInfo.environment)
     private lazy var settings = SettingsWindow(defaults: defaults)
@@ -139,6 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let trash = TrashSetting.read(defaults)  // once per drop, like quality
         busy += 1
+        cancelling = false
         updateIcon()
         lineOwner = id
         dropURLs[id] = urls
@@ -156,6 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 revealItem.isEnabled = !revealTargets.isEmpty
             }
             busy -= 1
+            if busy == 0 { cancelling = false }
             updateIcon()
             if qaMode {
                 print(summary.menuLine)
@@ -166,11 +169,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Progress from the owning batch while it runs; once finished it keeps its summary.
     private func showProgress(_ line: String, for id: UUID) {
-        if lineOwner == id, drops[id] != nil { lastDropLine.title = line }
+        if lineOwner == id, drops[id] != nil, !cancelling { lastDropLine.title = line }
     }
 
     @objc private func cancelConversions() {
         for task in drops.values { task.cancel() }
+        // The newest batch's summary replaces this line; a finished one keeps its summary.
+        if let owner = lineOwner, drops[owner] != nil { lastDropLine.title = "Cancelling…" }
+        cancelling = true
+        updateIcon()
     }
 
     private func logOutcome(_ outcome: Outcome) {
@@ -187,7 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateIcon() {
-        cancelItem.isEnabled = busy > 0
+        cancelItem.isEnabled = busy > 0 && !cancelling
         statusItem.button?.image = busy > 0
             ? NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "Swivel, converting")
             : NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Swivel")

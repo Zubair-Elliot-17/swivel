@@ -168,6 +168,18 @@ func lateRuleNamesTheFailingRule(_ name: String, _ i: LateInput, _ expected: Str
     #expect(TapRule.keyTyped(sinceKeyDown: 0.5, elapsed: 1.0, voiceOver: true) == false)
 }
 
+/// Esc hides the click wheel with VoiceOver on or off, even with no keyDown seen since the wheel opened (M7 AC 12).
+@Test(arguments: [(true, 0.5), (false, 0.5), (true, 10.0), (false, 10.0)])
+func escapeHidesTheWheel(_ voiceOver: Bool, _ sinceKeyDown: Double) {
+    #expect(TapRule.keyTyped(sinceKeyDown: sinceKeyDown, elapsed: 1.0, voiceOver: voiceOver, escape: true))
+}
+
+@Test func noEscapeKeepsTheOldRule() {
+    #expect(TapRule.keyTyped(sinceKeyDown: 10, elapsed: 1.0, voiceOver: false, escape: false) == false)
+    #expect(TapRule.keyTyped(sinceKeyDown: 0.5, elapsed: 1.0, voiceOver: true, escape: false) == false)
+    #expect(TapRule.keyTyped(sinceKeyDown: 0.5, elapsed: 1.0, voiceOver: false, escape: false))
+}
+
 // MARK: TriggerKeys (M6)
 
 @Test(arguments: [nil, "", "SHIFT", "Shift", " shift", "ctrl", "none", 1, true, ["shift"], Data("shift".utf8)] as [(any Sendable)?])
