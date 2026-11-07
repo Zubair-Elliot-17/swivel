@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/icon.png" alt="" width="96">
+
 # Swivel
 
 **Drag. Tap Shift. Drop on a format.**
@@ -11,7 +13,7 @@ A Mac menu-bar file converter. Start dragging a file, tap a modifier key, and a 
 ![Swift, SwiftUI and AppKit](https://img.shields.io/badge/Swift%20%C2%B7%20SwiftUI%20%C2%B7%20AppKit-16181d?style=flat-square&labelColor=16181d&color=f28c38)
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-16181d?style=flat-square&labelColor=16181d&color=3d7bff)
 ![Runs locally](https://img.shields.io/badge/runs-100%25%20locally-16181d?style=flat-square&labelColor=16181d&color=8fc79a)
-![283 tests](https://img.shields.io/badge/tests-283%20%2B%20104%20QA%20checks-16181d?style=flat-square&labelColor=16181d&color=c9a2f2)
+![300 tests](https://img.shields.io/badge/tests-300%20%2B%20113%20QA%20checks-16181d?style=flat-square&labelColor=16181d&color=c9a2f2)
 
 <img src="docs/wheel.png" alt="A Finder window with three photos. Sunset hike.jpg is selected and Swivel's wheel is open beside it, with PNG, JPEG, HEIC, WebP, TIFF, PDF and Text slices; JPEG is highlighted." width="700">
 
@@ -65,8 +67,8 @@ Swivel is a Swift package with two targets: `SwivelCore`, the converters and the
 
 ## How I checked it
 
-- **283 unit tests** for the converters, geometry, trigger rules, settings parsing and the trash rules, including hostile input: junk settings, broken PDFs, 384 kHz audio, files that vanish mid-batch.
-- **104 scripted QA checks** (`scripts/qa.sh`) that run real drops through the built app on throwaway disk images, including a read-only volume and one with no usable Trash.
+- **300 unit tests** for the converters, geometry, trigger rules, settings parsing and the trash rules, including hostile input: junk settings, broken PDFs, 384 kHz audio, files that vanish mid-batch.
+- **113 scripted QA checks** (`scripts/qa.sh`) that run real drops through the built app on throwaway disk images, including a read-only volume and one with no usable Trash.
 - **UI rows driven for real** with synthetic mouse and key events and the accessibility tree: the wheel, the Finder tap, Settings, and VoiceOver's spoken output read back from its caption panel.
 - Every milestone went through a separate code review and security review before it merged. Each "doesn't happen" check also had a matching "does happen" check.
 
