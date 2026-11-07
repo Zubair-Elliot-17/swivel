@@ -18,7 +18,7 @@ IN:
 5. **App Translocation guard**: launched from `/AppTranslocation/`, show "Move Swivel to Applications, then open it again." and don't register a login item.
 6. **Privacy sweep**: every file name or path in logs goes `.private` (21 sites); state words stay `.public` (QA reads them). QA settings suite needs `--qa-drop` as well as `SWIVEL_QA=1`. Control and bidi characters stripped from names in the menu line.
 7. **UX P3s**: Esc closes the click wheel; "Cancelling…" line after Cancel; a failed Open at Login shows a one-line alert; VoiceOver picker double label; slice toggles read "Show PNG on the Images wheel".
-8. **README Install** section (researcher's wording). The repo has no LICENSE; the release zip needs one only if the user picks one (zstack uses MIT).
+8. **README Install** section (researcher's wording) and an MIT LICENSE (user, 2026-11-07), shipped in the zip.
 
 OUT: Developer ID / notarization (user's call, 99 USD/yr), Homebrew cask, universal/Intel build, new formats, the other ~80 P3s, auto-update.
 
@@ -28,9 +28,8 @@ OUT: Developer ID / notarization (user's call, 99 USD/yr), Homebrew cask, univer
 - macui kit for the UI rows; FAT-without-Trash and APFS images in qa.sh.
 
 ## Needs the user
-- Publishing the GitHub Release (outward, first public binary).
-- Backing up the Swivel Dev key (.p12) off this Mac: if lost, every user re-grants Finder access once.
-- Whether Swivel gets a licence (none today; zstack is MIT).
+- Publishing the GitHub Release: approved by the user (2026-11-07) once checks pass.
+- Swivel Dev key: backed up to ~/Documents/Swivel-Dev.p12 (password-protected).
 - Developer ID: optional, later.
 
 ## Risks
