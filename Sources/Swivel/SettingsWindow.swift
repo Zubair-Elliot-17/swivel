@@ -133,7 +133,6 @@ struct SettingsView: View {
                 Picker("Open the wheel with", selection: Binding(get: { trigger }, set: { trigger = $0; TriggerSetting.write($0, to: defaults) })) {
                     ForEach(TriggerKeys.allCases, id: \.self) { Text(TriggerSetting.label($0)).tag($0) }
                 }
-                .accessibilityLabel("Open the wheel with")
             }
             ForEach(FileKind.allCases, id: \.self) { kind in
                 Section {
@@ -143,18 +142,19 @@ struct SettingsView: View {
                         Toggle(row.name, isOn: Binding(
                             get: { row.isOn },
                             set: { set(kind, LayoutRows.toggled(visible, row.name, on: $0)) }))
+                            .accessibilityLabel(Self.toggleLabel(row.name, kind: kind))
                             .disabled(row.isOn && !LayoutRows.canHide(visible))
                     }
                     .onMove { set(kind, LayoutRows.moved(rows, from: $0, to: $1)) }
                 } header: {
                     HStack {
-                        Text(title(kind))
+                        Text(Self.title(kind))
                         Spacer()
                         Button("Reset") {
                             LayoutRows.reset(kind, defaults: defaults)
                             layouts[kind] = Geometry.slices(for: kind, defaults: defaults)
                         }
-                        .accessibilityLabel("Reset \(title(kind))")
+                        .accessibilityLabel("Reset \(Self.title(kind))")
                     }
                 }
             }
@@ -176,7 +176,9 @@ struct SettingsView: View {
         layouts[kind] = Geometry.slices(for: kind, defaults: defaults)
     }
 
-    private func title(_ kind: FileKind) -> String {
+    static func toggleLabel(_ name: String, kind: FileKind) -> String { "Show \(name) on the \(title(kind)) wheel" }
+
+    private static func title(_ kind: FileKind) -> String {
         switch kind {
         case .image: "Images"
         case .video: "Video"

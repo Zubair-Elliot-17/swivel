@@ -162,3 +162,10 @@ func triggerKeysRoundTrip(_ keys: TriggerKeys) {
 @Test func triggerPickerNamesEveryChoice() {
     #expect(TriggerKeys.allCases.map(TriggerSetting.label) == ["Shift", "Control", "Shift or Control"])
 }
+
+// M7 AC 12: each slice toggle names its wheel. In-process AX of NSHostingView exposes no labels (probed), so U8 checks the tree.
+@Test(arguments: [(FileKind.image, "PNG", "Show PNG on the Images wheel"), (.video, "MP4", "Show MP4 on the Video wheel"),
+                  (.audio, "WAV", "Show WAV on the Audio wheel")])
+func sliceToggleLabelNamesTheWheel(kind: FileKind, name: String, label: String) {
+    #expect(SettingsView.toggleLabel(name, kind: kind) == label)
+}
