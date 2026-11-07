@@ -40,7 +40,7 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 
 ## M2b Finder tap
 - **Stable self-signed signing identity** (`scripts/bundle.sh`): ad-hoc builds get a new cdhash, so the Automation grant is lost on each rebuild (README has the `tccutil reset` workaround).
-- **Esc to dismiss the click wheel**: needs the panel to be key; check first that Finder gets keyboard focus back after `orderOut`.
+- ~~**Esc to dismiss the click wheel**~~ Done in M7: the wheel polls the Esc key state (the panel stays non-key), with VoiceOver on or off.
 - **Keyboard slice pick** in click mode (arrows/Return), same key-focus caveat as Esc.
 - **flagsChanged canary log**: global flagsChanged without Accessibility is undocumented; log "tap monitor: no flagsChanged seen" when the drag poll sees a Shift edge the monitor missed.
 - **First click converts at once** (`WheelPanel.swift:163`): no selection count is shown; ignore clicks in the first ~150 ms after open, show the count, or confirm over ~50 items.
@@ -88,7 +88,7 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 
 ## M4 review (P3)
 - **No cap on concurrent drops** (`main.swift` drop): each drop starts its own batch; AV batches then share one media engine. Queue or cap them.
-- **No "Cancelling…" feedback**: after Cancel conversions the line keeps the last progress until each batch stops; show "Cancelling…" and disable the item.
+- ~~**No "Cancelling…" feedback**~~ Done in M7: the line reads "Cancelling…" and the item is disabled until the batches end or a new drop starts.
 - **Failed temp removal not logged on success** (`AVConvert.swift` viaTemp): `try?` drops the error after a claim; log it like removeLate does.
 - **Untested: disk full and the same source dropped twice at once**: needs a small disk image fixture and two overlapping convertAV calls on one file.
 - **`show(at:)` keeps the previous slice set until draggingEntered** (`WheelPanel.swift`): a wheel shown for a new drag briefly draws the last drag's slices.
@@ -111,12 +111,12 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **`activate(ignoringOtherApps:)` is API_TO_BE_DEPRECATED** (`SettingsWindow.show`): no warning today; a later SDK may warn and break the 0-warning gate. Switch to `NSApp.activate()` (macOS 14+) then.
 - **Settings window doesn't reload on outside changes**: a `defaults write` while it is open shows the old list until the next launch; the wheel reads fresh on every show.
 - **Stored layouts hide future default slices** (OV6): a saved list keeps only its names; README says so. Consider storing hidden names instead if new slices are added.
-- **Settings toggles are labelled by format name only** ("PNG"): VoiceOver reads "PNG, switch"; consider "Show PNG on the Images wheel".
+- ~~**Settings toggles are labelled by format name only**~~ Done in M7: "Show PNG on the Images wheel".
 - **Open at Login, `.requiresApproval` and next-login launch are manual-only** (QA M5-M1, M5-M2), and macOS 14 is unverified (M5-M3).
 - **`SWIVEL_QA=1` alone switches settings to the QA suite** (`AppDefaults`), even without `--qa-drop`: intended for scripted runs, noted so nobody sets it in a login shell.
 
 ## M5 review (P3)
-- **A failed Open at Login is only logged** (`LoginItem.swift` click): `register()` errors (e.g. bad signature) leave the item unchecked with no explanation; show a short alert or a menu line.
+- ~~**A failed Open at Login is only logged**~~ Done in M7: one alert, "Couldn't change Open at Login.", then the check mark is re-read.
 - **OCR never checks cancellation** (`TextExtract.swift` extractText page loop, pre-M5): Cancel conversions doesn't stop a 100-page OCR; check `Task.isCancelled` between pages.
 - **QA suite switch reads `SWIVEL_QA` alone** (`AppDefaults.swift` suiteName): also require `--qa-drop`, so a leaked env var can't point the normal app at the suite qa.sh wipes.
 
@@ -134,8 +134,8 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **Symlinked source trash behaviour not pinned** (`TrashRun.swift:51`): untested whether the link or its target goes; consider skipping symlinks.
 - **In-use and dedupe compare standardized paths only** (`TrashRun.swift:24`, `Trash.swift:17`): /var vs /private/var and case differences slip through; use fileResourceIdentifier.
 - **qa.sh trust checks** (`scripts/qa.sh:10`, `:228-230`): assert $MNT is a separate mounted volume (`stat -f %d`), and make tdrop reject `/../` and paths off the image.
-- **Pre-existing: full drop paths logged with privacy .public** (`main.swift:113`).
+- ~~**Pre-existing: full drop paths logged with privacy .public**~~ Done in M7: names, paths and error text are logged `.private`.
 - **main.swift trash wiring has no app-level test** (`main.swift:140-150`): cancel between job() and trash and the busy bookkeeping are unit-covered via TrashRun only.
 
 
-- Settings picker label is spoken twice by VoiceOver ("Open the wheel with, Open the wheel with Shift or Control pop up button"); drop the extra label (M6-M2, P3).
+- ~~Settings picker label is spoken twice by VoiceOver~~ Done in M7: the extra label is gone (spoken check is manual, U8).

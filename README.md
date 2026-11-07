@@ -6,7 +6,7 @@
 
 A Mac menu-bar file converter. Start dragging a file, tap a modifier key, and a wheel of formats opens under the pointer. Drop on one and the converted file lands next to the original. Nothing is uploaded.
 
-[**How it works**](#how-it-works) · [**Case study**](#the-brief) · [**Build it**](#build-it)
+[**Install**](#install) · [**How it works**](#how-it-works) · [**Case study**](#the-brief) · [**Build it**](#build-it)
 
 ![Swift, SwiftUI and AppKit](https://img.shields.io/badge/Swift%20%C2%B7%20SwiftUI%20%C2%B7%20AppKit-16181d?style=flat-square&labelColor=16181d&color=f28c38)
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-16181d?style=flat-square&labelColor=16181d&color=3d7bff)
@@ -26,7 +26,7 @@ A Mac menu-bar file converter. Start dragging a file, tap a modifier key, and a 
 
 ### Contents
 
-[The brief](#the-brief) · [How it works](#how-it-works) · [Design decisions](#design-decisions) · [Build](#build) · [How I checked it](#how-i-checked-it) · [What I'd do next](#what-id-do-next) · [Using Swivel](#using-swivel) · [Build it](#build-it)
+[The brief](#the-brief) · [How it works](#how-it-works) · [Design decisions](#design-decisions) · [Build](#build) · [How I checked it](#how-i-checked-it) · [What I'd do next](#what-id-do-next) · [Install](#install) · [Using Swivel](#using-swivel) · [Build it](#build-it)
 
 ---
 
@@ -73,8 +73,29 @@ Swivel is a Swift package with two targets: `SwivelCore`, the converters and the
 ## What I'd do next
 
 - A signed and notarized release, so it opens without the Gatekeeper prompt.
-- Keyboard control of the wheel (arrows and Return), and Esc to close it.
+- Keyboard control of the wheel (arrows and Return).
 - More inputs through AVFoundation where macOS can decode them, and an MP3 encoder if I ever bundle one.
+
+## Install
+
+Swivel needs macOS 14 or later on Apple Silicon.
+
+1. Download `Swivel-1.0.0.zip` from [Releases](https://github.com/Zubair-Elliot-17/swivel/releases) and double-click it to unzip.
+2. Drag **Swivel** into your **Applications** folder. Do this before you open it.
+3. Double-click Swivel in Applications. macOS says it can't verify the app, because Swivel isn't notarized by Apple (that needs a paid developer account). Click **Done**.
+4. Open **System Settings > Privacy & Security**, scroll to **Security**, and click **Open Anyway** next to "Swivel was blocked". Confirm with your password, then click **Open Anyway** again. The button only shows for about an hour after step 3.
+
+You only do this once. Swivel lives in the menu bar (look for its icon top right) and has no Dock icon. A welcome window shows the gesture; open it again from the menu with **Welcome…**.
+
+**Terminal alternative** (skips steps 3-4; only for builds you downloaded from this repo's Releases page):
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Swivel.app
+```
+
+**Updating:** quit Swivel, replace the app in Applications, and repeat steps 3-4 if macOS asks. Your Finder access and Open at Login carry over.
+
+To build it yourself, see [Build it](#build-it).
 
 ## Using Swivel
 
