@@ -311,6 +311,9 @@ defaults delete $QA 2>/dev/null || true
 # M7-1: the bundle QA tests is the one that ships: hardened runtime, apple-events entitlement, Swivel Dev DR.
 out=$("$ROOT/scripts/check-app.sh" sign "$ROOT/build/Swivel.app") && pass M7-1 || fail M7-1 "$(echo $out)"
 
+# M7-2: version, icon, copyright and libwebp credits in the bundle; the icon reads back at every size.
+out=$("$ROOT/scripts/check-app.sh" bundle "$ROOT/build/Swivel.app") && pass M7-2 || fail M7-2 "$(echo $out)"
+
 # M7-3: bidi and newline characters never reach the menu line; the output keeps the real name.
 rlo=$'x\xe2\x80\xaey' lf=$'a\nb'
 mkdir m73 && cp a.jpg "m73/$rlo.jpg" && cp a.jpg "m73/$lf.jpg"
