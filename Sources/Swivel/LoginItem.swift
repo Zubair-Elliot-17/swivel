@@ -13,6 +13,7 @@ final class LoginItem: NSObject {
     private let status: () -> SMAppService.Status
     private let run: @MainActor (Action) throws -> Void
     private let alert: @MainActor (String) -> Void
+    var onChange: (Bool) -> Void = { _ in }  // the state after every refresh
 
     /// Translocated, a login item would point at a random read-only path, so it is never registered.
     var disabled = false {
@@ -45,7 +46,9 @@ final class LoginItem: NSObject {
     var isOn: Bool { Self.isChecked(status()) }
 
     func refresh() {
-        menuItem.state = isOn ? .on : .off
+        let on = isOn
+        menuItem.state = on ? .on : .off
+        onChange(on)
     }
 
     /// The one toggle for the menu item and the welcome checkbox.

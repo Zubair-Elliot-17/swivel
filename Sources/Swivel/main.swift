@@ -78,10 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         finderTap.dismissWheel = { wheel.hideClickMode() }
         finderTap.onTap = { wheel.showForClick(at: $0, urls: $1) }
         welcome.model.enableTap = { finderTap.enable() }
-        welcome.model.toggleLogin = { [loginItem] in
-            loginItem.toggle()
-            return loginItem.isOn
-        }
+        welcome.bindLogin(loginItem)
         finderTap.onStatus = { [tapLine, enableTapItem, welcome] status in
             tapLine.title = status.menuLine
             welcome.model.tapLine = status.menuLine

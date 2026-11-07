@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import Testing
 import SwivelCore
 @testable import Swivel
@@ -78,5 +79,36 @@ func welcomeStepsNameTheTriggerKey(_ keys: TriggerKeys) {
         welcome.window.cancelOperation(nil)
         #expect(welcome.window.isVisible == false)
         #expect(d.object(forKey: WelcomeSetting.key) == nil)  // opening it never changes the flag
+    }
+}
+
+// M7 review F1: the checkbox follows the login item while the window is open (menu toggle, menu open,
+// a System Settings change seen when the window becomes key), so clicking it never undoes that change.
+@MainActor @Test func welcomeLoginCheckboxFollowsTheLoginItem() {
+    stored(nil) { d in
+        _ = NSApplication.shared
+        var status = SMAppService.Status.notRegistered
+        var ran: [LoginItem.Action] = []
+        let login = LoginItem(status: { status }, run: { ran.append($0); status = $0 == .register ? .enabled : .notRegistered }, alert: { _ in })
+        let welcome = WelcomeWindow(defaults: d, model: WelcomeModel(translocated: false, loginDisabled: false))
+        welcome.bindLogin(login)
+        welcome.show(loginOn: login.isOn)
+        #expect(welcome.model.loginOn == false)
+
+        login.toggle()  // the menu item
+        #expect(welcome.model.loginOn)
+
+        status = .notRegistered  // turned off in System Settings
+        login.refresh()  // menu open
+        #expect(welcome.model.loginOn == false)
+
+        status = .enabled  // turned on in System Settings
+        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: welcome.window)
+        #expect(welcome.model.loginOn)
+
+        // The checkbox now turns it off, not on again.
+        #expect(welcome.model.toggleLogin() == false)
+        #expect(ran == [.register, .unregister])
+        welcome.window.close()
     }
 }

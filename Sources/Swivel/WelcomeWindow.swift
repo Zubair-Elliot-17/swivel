@@ -34,6 +34,7 @@ final class WelcomeModel: ObservableObject {
     @Published var loginOn = false
     var enableTap: () -> Void = {}
     var toggleLogin: () -> Bool = { false }  // returns the new state
+    var refreshLogin: () -> Void = {}  // re-reads the login item, which then sets loginOn
     var close: () -> Void = {}
 
     init(translocated: Bool, loginDisabled: Bool) {
@@ -52,6 +53,7 @@ private final class WelcomeNSWindow: NSWindow {
 final class WelcomeWindow {
     private let defaults: UserDefaults
     let model: WelcomeModel
+    private var keyObserver: NSObjectProtocol?
 
     init(defaults: UserDefaults, model: WelcomeModel) {
         self.defaults = defaults
@@ -65,6 +67,10 @@ final class WelcomeWindow {
         window.isReleasedWhenClosed = false
         window.center()
         model.close = { [weak window] in window?.close() }
+        // Open at Login may have changed in System Settings while the window sat in the background.
+        keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) {
+            [model] _ in MainActor.assumeIsolated { model.refreshLogin() }
+        }
         return window
     }()
 
@@ -76,6 +82,16 @@ final class WelcomeWindow {
         // An accessory app isn't active, so the window would open behind the frontmost app.
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+    }
+
+    /// The checkbox follows every refresh of the login item: menu open, either toggle, the window becoming key.
+    func bindLogin(_ login: LoginItem) {
+        model.toggleLogin = {
+            login.toggle()
+            return login.isOn
+        }
+        model.refreshLogin = { login.refresh() }
+        login.onChange = { [weak model] in model?.loginOn = $0 }
     }
 }
 
