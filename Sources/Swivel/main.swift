@@ -23,6 +23,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let defaults = AppDefaults.make(environment: ProcessInfo.processInfo.environment)
     private lazy var settings = SettingsWindow(defaults: defaults)
     private let loginItem = LoginItem()
+    private let qa = ProcessInfo.processInfo.environment["SWIVEL_QA"] == "1"
+    private let translocated = Launch.isTranslocated(Bundle.main.bundlePath)
+    private lazy var welcome = WelcomeWindow(
+        defaults: defaults, model: WelcomeModel(translocated: translocated, loginDisabled: translocated))
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -42,9 +46,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         enableTapItem.target = self
         menu.addItem(enableTapItem)
         menu.addItem(.separator())
+        let welcomeItem = NSMenuItem(title: "Welcome…", action: #selector(openWelcome), keyEquivalent: "")
+        welcomeItem.target = self
+        menu.addItem(welcomeItem)
         let aboutItem = NSMenuItem(title: "About Swivel", action: #selector(about), keyEquivalent: "")
         aboutItem.target = self
         menu.addItem(aboutItem)
+        loginItem.disabled = translocated
         menu.addItem(loginItem.menuItem)
         let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
@@ -69,8 +77,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         finderTap.isDragLive = { dragMonitor.isLive }
         finderTap.dismissWheel = { wheel.hideClickMode() }
         finderTap.onTap = { wheel.showForClick(at: $0, urls: $1) }
-        finderTap.onStatus = { [tapLine, enableTapItem] status in
+        welcome.model.enableTap = { finderTap.enable() }
+        welcome.model.toggleLogin = { [loginItem] in
+            loginItem.toggle()
+            return loginItem.isOn
+        }
+        finderTap.onStatus = { [tapLine, enableTapItem, welcome] status in
             tapLine.title = status.menuLine
+            welcome.model.tapLine = status.menuLine
             // nothingSelected means access is granted, so there is nothing to enable.
             enableTapItem.isEnabled = status == .needsAccess || status == .denied
         }
@@ -79,11 +93,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // QA entry point for scripts/qa.sh: SWIVEL_QA=1 Swivel --qa-drop <slice> <path>... runs one drop, prints the menu line, quits.
         let args = CommandLine.arguments
-        if ProcessInfo.processInfo.environment["SWIVEL_QA"] == "1", args.count > 2, args[1] == "--qa-drop" {
+        if qa, args.count > 2, args[1] == "--qa-drop" {
             qaMode = true
             drop(args[2], args.dropFirst(3).map { URL(fileURLWithPath: $0) })
             if busy == 0 { NSApp.terminate(nil) }  // unknown slice: nothing started
+        } else if Launch.welcomeAtLaunch(defaults, qa: qa, translocated: translocated) {
+            openWelcome()
         }
+    }
+
+    /// Opening Swivel again while it runs shows the welcome window (the menu-bar icon can hide behind the notch).
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openWelcome()
+        return false
     }
 
     /// Key equivalents need a main menu: Cmd-, opens Settings and Cmd-W closes it while it is key.
@@ -102,6 +124,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         loginItem.refresh()  // the user can change it in System Settings at any time
+    }
+
+    @objc private func openWelcome() {
+        welcome.show(loginOn: loginItem.isOn)
     }
 
     @objc private func openSettings() {

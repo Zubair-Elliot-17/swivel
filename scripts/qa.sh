@@ -12,6 +12,7 @@ QA=dev.zubair.swivel.qa  # QA-mode settings suite; the user's dev.zubair.swivel 
 cleanup() { [ -d "$MNT" ] && hdiutil detach -quiet "$MNT" || true; rm -rf "$F"; defaults delete $QA 2>/dev/null || true; }
 trap cleanup EXIT
 defaults delete $QA 2>/dev/null || true
+USERSEEN=$(defaults read dev.zubair.swivel welcomeSeen 2>/dev/null || echo absent)  # read only; M7-4 compares it at the end
 echo "sha $(git rev-parse --short HEAD)$(git diff --quiet HEAD || echo '+dirty'), fixtures $F"
 
 fails=0
@@ -328,6 +329,10 @@ leak=$(grep -rnE 'privacy: \.public' "$ROOT/Sources" | grep -E 'lastPathComponen
 expect "M7-7 no public names" "$leak" ""
 sites=$(grep -rn 'privacy: .public' "$ROOT/Sources" | sed "s|^$ROOT/Sources/||" | cut -d: -f1 | sort | uniq -c | tr -s ' ' | tr '\n' ';')
 expect "M7-7 public sites" "$sites" " 1 Swivel/DragMonitor.swift; 2 Swivel/FinderTap.swift; 3 Swivel/main.swift; 1 SwivelCore/PDFMaker.swift; 2 SwivelCore/PDFRender.swift; 1 SwivelCore/TextExtract.swift;"
+
+# M7-4: QA runs never touch welcomeSeen: the user's value is unchanged and the QA suite (fresh since M6-M1) has none.
+expect "M7-4 user welcomeSeen" "$(defaults read dev.zubair.swivel welcomeSeen 2>/dev/null || echo absent)" "$USERSEEN"
+expect "M7-4 QA welcomeSeen" "$(defaults read $QA welcomeSeen 2>/dev/null || echo absent)" absent
 
 echo "$fails failed"
 exit $((fails > 0))
