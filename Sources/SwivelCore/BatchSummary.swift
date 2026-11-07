@@ -29,15 +29,18 @@ public func menuReason(for error: Error) -> String {
     }
 }
 
-/// A file name safe for a menu line: control, format (bidi, zero-width) and separator characters dropped; nothing left reads "file".
+/// A file name safe for a menu line: control, format (bidi, zero-width) and separator characters dropped,
+/// except ZWNJ/ZWJ, which join emoji and shape scripts; nothing visible left reads "file".
 public func menuName(_ s: String) -> String {
+    let joiners: Set<Unicode.Scalar> = ["\u{200C}", "\u{200D}"]
     let kept = s.unicodeScalars.filter {
+        if joiners.contains($0) { return true }
         switch $0.properties.generalCategory {
-        case .control, .format, .lineSeparator, .paragraphSeparator: false
-        default: true
+        case .control, .format, .lineSeparator, .paragraphSeparator: return false
+        default: return true
         }
     }
-    return kept.isEmpty ? "file" : String(String.UnicodeScalarView(kept))
+    return kept.allSatisfy(joiners.contains) ? "file" : String(String.UnicodeScalarView(kept))
 }
 
 /// Menu text while a batch runs, e.g. "Converting clip.mov 42% (2 of 5)"; the fraction is clamped and NaN reads 0%.

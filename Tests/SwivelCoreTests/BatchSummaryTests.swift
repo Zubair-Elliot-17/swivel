@@ -168,20 +168,23 @@ func notTrashedSuffix(outcomes: [Outcome], notTrashed: Int, expected: String) {
 
 @Test(arguments: [
     "\u{0}", "\u{1F}", "\n", "\r", "\t", "\u{7F}", "\u{85}", "\u{9F}",  // C0, DEL, C1
-    "\u{200B}", "\u{200C}", "\u{200D}", "\u{200E}", "\u{200F}",  // zero width, LRM/RLM
-    "\u{202A}", "\u{202D}", "\u{202E}", "\u{2066}", "\u{2069}",  // bidi embeddings, overrides, isolates
+    "\u{200B}", "\u{200E}", "\u{200F}", "\u{061C}",  // zero width space, LRM/RLM, ALM
+    "\u{202A}", "\u{202B}", "\u{202C}", "\u{202D}", "\u{202E}",  // bidi embeddings, overrides
+    "\u{2066}", "\u{2067}", "\u{2068}", "\u{2069}",  // bidi isolates
     "\u{2028}", "\u{2029}", "\u{FEFF}",  // line/paragraph separators, BOM
 ])
 func menuNameStripsInvisibleCharacters(_ c: String) {
     #expect(menuName("x\(c)y.jpg") == "xy.jpg")
 }
 
-@Test(arguments: ["café.png", "cafe\u{301}.png", "🙂 photo.png", "my  file .png", "日本語.heic", "a-b_c (2).mov"])
+// ZWJ and ZWNJ join emoji and shape Persian and Indic names (M7 review F3).
+@Test(arguments: ["café.png", "cafe\u{301}.png", "🙂 photo.png", "my  file .png", "日本語.heic", "a-b_c (2).mov",
+                  "👨\u{200D}👩\u{200D}👧 family.png", "می\u{200C}خواهم.png", "क्\u{200D}ष.jpg"])
 func menuNameKeepsVisibleText(_ name: String) {
     #expect(menuName(name) == name)
 }
 
-@Test(arguments: ["", "\u{202E}", "\n\u{200B}\u{FEFF}"])
+@Test(arguments: ["", "\u{202E}", "\n\u{200B}\u{FEFF}", "\u{200D}", "\u{200C}\u{202E}\u{200D}"])
 func menuNameOfNothingVisibleIsFile(_ name: String) {
     #expect(menuName(name) == "file")
 }
