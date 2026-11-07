@@ -139,3 +139,13 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 
 
 - ~~Settings picker label is spoken twice by VoiceOver~~ Done in M7: the extra label is gone (spoken check is manual, U8).
+
+## M7 review (P3)
+- **Empty failure reason reads "file"** (`BatchSummary.swift:89`): `menuName` falls back to "file"; give it a fallback parameter and pass "unknown error" for reasons.
+- **Welcome key observer never removed** (`WelcomeWindow.swift:71`): add `deinit { keyObserver.map(NotificationCenter.default.removeObserver) }` (only test instances leak).
+- **`menuName` is a denylist with no length cap** (`BatchSummary.swift:33`): consider an allowlist plus an ~80-character cap with "…".
+- **qa.sh M7-7 drops the whole `drop slice=` line** (`scripts/qa.sh:328,331`): count matches with `grep -o` so flipping its urls part to `.public` would fail.
+- **Notices check passes vacuously if COPYING/PATENTS are missing** (`release.sh:44`, `check-app.sh:32`): check the files exist and are non-empty first.
+- **Tag check is local only** (`release.sh:20`): also check `git ls-remote --tags origin v1.0.0`.
+- **Off-main release.sh builds a shippable-looking zip** (`release.sh`): label the output "not a release" (its CFBundleVersion follows the branch's commit count).
+- **Esc under VoiceOver polls `keyState` at 30 Hz** (`WheelPanel.swift:319`): a tap under 33 ms can be missed; latch with `secondsSinceLastEventType`, and keep U6 as the check.
