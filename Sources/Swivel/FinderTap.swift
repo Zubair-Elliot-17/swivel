@@ -109,7 +109,7 @@ final class FinderTap {
         var error: NSDictionary?
         guard let result = script?.executeAndReturnError(&error) else {
             let code = error?[NSAppleScript.errorNumber] as? Int ?? 0
-            tapLog.error("Finder selection failed: \(code) \(error?[NSAppleScript.errorMessage] as? String ?? "", privacy: .public)")
+            tapLog.error("Finder selection failed: \(code) \(error?[NSAppleScript.errorMessage] as? String ?? "", privacy: .private)")
             if code == -1743 || code == -1744 { setStatus(TapStatus(permission: Int32(code))) }
             return nil
         }

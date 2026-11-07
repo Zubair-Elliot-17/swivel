@@ -242,7 +242,7 @@ extension Converter {
             if (try? FileManager.default.removeItem(at: dir)) != nil || !FileManager.default.fileExists(atPath: dir.path) { return }
             await pause(100)
         }
-        convertLog.error("couldn't remove \(dir.path, privacy: .public)")
+        convertLog.error("couldn't remove \(dir.path, privacy: .private)")
     }
 
     /// Sleeps even in a cancelled task (Task.sleep returns at once there).

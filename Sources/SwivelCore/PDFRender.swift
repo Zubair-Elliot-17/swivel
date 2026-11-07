@@ -14,7 +14,8 @@ extension Converter {
         }
         let count = doc.pageCount
         if count > maxPages {
-            convertLog.info("\(source.lastPathComponent, privacy: .public): \(pagesSkipped(count - maxPages, max: maxPages), privacy: .public)")
+            let file = source.lastPathComponent
+            convertLog.info("\(file, privacy: .private): \(pagesSkipped(count - maxPages, max: maxPages), privacy: .public)")
         }
         var outputs: [URL] = [], spent = 0
         for i in 0..<min(count, maxPages) {
@@ -63,7 +64,8 @@ extension Converter {
     }
 
     static func logBudget(_ source: URL, skipped: Int, max: Int) {
-        convertLog.info("\(source.lastPathComponent, privacy: .public): \(pagesSkipped(skipped, max: max / 1_000_000, unit: " MP"), privacy: .public)")
+        let file = source.lastPathComponent
+        convertLog.info("\(file, privacy: .private): \(pagesSkipped(skipped, max: max / 1_000_000, unit: " MP"), privacy: .public)")
     }
 
     /// Pixel size `render` gives the page: crop box at `dpi`, clamped to 200 MP and 65,535 px a side.

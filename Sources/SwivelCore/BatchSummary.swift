@@ -29,11 +29,22 @@ public func menuReason(for error: Error) -> String {
     }
 }
 
+/// A file name safe for a menu line: control, format (bidi, zero-width) and separator characters dropped; nothing left reads "file".
+public func menuName(_ s: String) -> String {
+    let kept = s.unicodeScalars.filter {
+        switch $0.properties.generalCategory {
+        case .control, .format, .lineSeparator, .paragraphSeparator: false
+        default: true
+        }
+    }
+    return kept.isEmpty ? "file" : String(String.UnicodeScalarView(kept))
+}
+
 /// Menu text while a batch runs, e.g. "Converting clip.mov 42% (2 of 5)"; the fraction is clamped and NaN reads 0%.
 public func progressLine(name: String, fraction: Double, index: Int, total: Int) -> String {
     let f = fraction.isNaN ? 0 : min(max(fraction, 0), 1)
     let percent = Int(exactly: (f * 100).rounded(.down)) ?? 0
-    return "Converting \(name) \(percent)% (\(index) of \(total))"
+    return "Converting \(menuName(name)) \(percent)% (\(index) of \(total))"
 }
 
 /// One-line menu text for a batch; names files only, never full paths.
@@ -67,9 +78,9 @@ public struct BatchSummary {
         let trashNote = notTrashed > 0 ? " (\(notTrashed) not moved to Trash)" : ""
         let line: String
         if let (source, reason) = failure {
-            line = "Failed: \(source.lastPathComponent): \(reason) (\(converted) of \(total) converted\(skipNote))"
+            line = "Failed: \(menuName(source.lastPathComponent)): \(reason) (\(converted) of \(total) converted\(skipNote))"
         } else if let last = outputs.last {
-            line = "Last: \(last.lastPathComponent) (\(converted) of \(total)\(skipNote))"
+            line = "Last: \(menuName(last.lastPathComponent)) (\(converted) of \(total)\(skipNote))"
         } else if let first = skips.first {
             line = "Skipped \(total) of \(total): \(first)"
         } else {

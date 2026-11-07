@@ -163,3 +163,34 @@ func notTrashedSuffix(outcomes: [Outcome], notTrashed: Int, expected: String) {
     #expect(s.menuLine == "Last: multi.png (1 of 1)")
     #expect(s.converted == 1 && s.outputs == [url("multi.png")])
 }
+
+// MARK: Menu names (M7 AC 8): control, format and separator characters never reach the menu.
+
+@Test(arguments: [
+    "\u{0}", "\u{1F}", "\n", "\r", "\t", "\u{7F}", "\u{85}", "\u{9F}",  // C0, DEL, C1
+    "\u{200B}", "\u{200C}", "\u{200D}", "\u{200E}", "\u{200F}",  // zero width, LRM/RLM
+    "\u{202A}", "\u{202D}", "\u{202E}", "\u{2066}", "\u{2069}",  // bidi embeddings, overrides, isolates
+    "\u{2028}", "\u{2029}", "\u{FEFF}",  // line/paragraph separators, BOM
+])
+func menuNameStripsInvisibleCharacters(_ c: String) {
+    #expect(menuName("x\(c)y.jpg") == "xy.jpg")
+}
+
+@Test(arguments: ["café.png", "cafe\u{301}.png", "🙂 photo.png", "my  file .png", "日本語.heic", "a-b_c (2).mov"])
+func menuNameKeepsVisibleText(_ name: String) {
+    #expect(menuName(name) == name)
+}
+
+@Test(arguments: ["", "\u{202E}", "\n\u{200B}\u{FEFF}"])
+func menuNameOfNothingVisibleIsFile(_ name: String) {
+    #expect(menuName(name) == "file")
+}
+
+@Test func menuLinesUseMenuNames() {
+    let rlo = url("x\u{202E}gnp.exe"), lf = url("a\nb.png")
+    #expect(BatchSummary([.converted(source: rlo, outputs: [lf])]).menuLine == "Last: ab.png (1 of 1)")
+    #expect(BatchSummary([.failed(source: rlo, reason: "disk full")]).menuLine == "Failed: xgnp.exe: disk full (0 of 1 converted)")
+    #expect(progressLine(name: "a\nb.mov", fraction: 0.5, index: 1, total: 1) == "Converting ab.mov 50% (1 of 1)")
+    // Reveal still gets the real URL.
+    #expect(BatchSummary([.converted(source: rlo, outputs: [lf])]).outputs == [lf])
+}

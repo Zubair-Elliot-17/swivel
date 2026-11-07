@@ -41,7 +41,7 @@ final class LoginItem: NSObject {
             case .openLoginItems: SMAppService.openSystemSettingsLoginItems()
             }
         } catch {
-            loginLog.error("open at login failed: \(error.localizedDescription, privacy: .public)")
+            loginLog.error("open at login failed: \((error as NSError).code)")
         }
         refresh()
     }

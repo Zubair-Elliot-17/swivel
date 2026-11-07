@@ -63,7 +63,10 @@ extension Converter {
             do {
                 // Only frames that fit are checked, so a bad frame past the cap can't fail the source.
                 for i in 0..<min(count, max(room, 0)) { _ = try pixelSize(src, at: i) }
-                if count > room { convertLog.info("\(url.lastPathComponent, privacy: .public): \(pagesSkipped(count - max(room, 0), max: maxPages), privacy: .public)") }
+                if count > room {
+                    let file = url.lastPathComponent
+                    convertLog.info("\(file, privacy: .private): \(pagesSkipped(count - max(room, 0), max: maxPages), privacy: .public)")
+                }
                 guard room > 0 else {
                     outcomes.append(.skipped(source: url, .pageLimit))
                     continue
@@ -91,7 +94,7 @@ extension Converter {
             } catch where drawn > 0 {
                 // Like a source cut by the page cap: its drawn pages are in the PDF, so it counts as converted.
                 let missing = min(count, room) - drawn
-                convertLog.info("\(url.lastPathComponent, privacy: .public): \(missing) page\(missing == 1 ? "" : "s") not read (\(error.localizedDescription, privacy: .public))")
+                convertLog.info("\(url.lastPathComponent, privacy: .private): \(missing) page\(missing == 1 ? "" : "s") not read (\(error.localizedDescription, privacy: .private))")
                 cut.insert(outcomes.count)
                 outcomes.append(nil)
             } catch {

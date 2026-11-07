@@ -108,12 +108,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         finderTap?.enable()
     }
 
-    private func drop(_ name: String, _ urls: [URL]) {
+    private func drop(_ slice: String, _ urls: [URL]) {
         let paths = urls.map(\.path)
-        log.info("drop slice=\(name, privacy: .public) urls=\(paths.joined(separator: ", "), privacy: .public)")
+        log.info("drop slice=\(slice, privacy: .public) urls=\(paths.joined(separator: ", "), privacy: .private)")
         let id = UUID()
         let job: @Sendable () async -> [Outcome]
-        switch (ImageFormat(rawValue: name), AVTarget(rawValue: name), name) {
+        switch (ImageFormat(rawValue: slice), AVTarget(rawValue: slice), slice) {
         case (let format?, _, _):
             let quality = QualitySetting.read(defaults)  // once per drop, so a batch never mixes qualities
             job = { await Converter.convertBatch(urls, to: format, quality: quality) }
@@ -134,7 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case (nil, nil, "PDF"): job = { await Converter.makePDF(urls) }
         case (nil, nil, "Text"): job = { await Converter.textBatch(urls) }
         default:
-            log.info("drop on unknown slice \(name, privacy: .public)")
+            log.info("drop on unknown slice \(slice, privacy: .public)")
             return
         }
         let trash = TrashSetting.read(defaults)  // once per drop, like quality
@@ -147,7 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             dropURLs[id] = nil
             for outcome in outcomes { logOutcome(outcome) }
             // Still in `drops` here, so Cancel during the trash step stops it.
-            let notTrashed = await TrashRun.afterBatch(outcomes, slice: name, enabled: trash) { self.dropURLs.values.flatMap { $0 } }
+            let notTrashed = await TrashRun.afterBatch(outcomes, slice: slice, enabled: trash) { self.dropURLs.values.flatMap { $0 } }
             drops[id] = nil  // before the summary, so a late progress hop can't overwrite it
             let summary = BatchSummary(outcomes, notTrashed: notTrashed)
             if lineOwner == id {
@@ -177,11 +177,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch outcome {
         case .converted(let source, let outputs, _):
             let names = outputs.map(\.lastPathComponent).joined(separator: ", ")
-            log.info("converted \(source.lastPathComponent, privacy: .public) -> \(names, privacy: .public)")
+            log.info("converted \(source.lastPathComponent, privacy: .private) -> \(names, privacy: .private)")
         case .skipped(let source, let reason):
-            log.info("skipped \(source.lastPathComponent, privacy: .public): \(reason.description, privacy: .public)")
+            let file = source.lastPathComponent
+            log.info("skipped \(file, privacy: .private): \(reason.description, privacy: .public)")
         case .failed(let source, let reason, let detail):
-            log.info("failed \(source.lastPathComponent, privacy: .public): \(detail ?? reason, privacy: .public)")
+            log.info("failed \(source.lastPathComponent, privacy: .private): \(detail ?? reason, privacy: .private)")
         }
     }
 

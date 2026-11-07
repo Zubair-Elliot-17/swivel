@@ -27,19 +27,19 @@ enum TrashRun {
         for (source, outputs) in candidates {
             let name = source.lastPathComponent
             if inUse.contains(source.standardizedFileURL.path) {
-                trashLog.info("not trashed \(name, privacy: .public): in use by another drop")
+                trashLog.info("not trashed \(name, privacy: .private): in use by another drop")
             } else if !fm.fileExists(atPath: source.path) {
-                trashLog.info("not trashed \(name, privacy: .public): already gone")
+                trashLog.info("not trashed \(name, privacy: .private): already gone")
             } else if let missing = outputs.first(where: { !fm.fileExists(atPath: $0.path) }) {
                 kept += 1
-                trashLog.info("not trashed \(name, privacy: .public): output missing \(missing.lastPathComponent, privacy: .public)")
+                trashLog.info("not trashed \(name, privacy: .private): output missing \(missing.lastPathComponent, privacy: .private)")
             } else {
                 do {
                     try trash(source)
-                    trashLog.info("trashed \(name, privacy: .public)")
+                    trashLog.info("trashed \(name, privacy: .private)")
                 } catch {
                     kept += 1
-                    trashLog.info("not trashed \(name, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    trashLog.info("not trashed \(name, privacy: .private): \(error.localizedDescription, privacy: .private)")
                 }
             }
         }

@@ -18,7 +18,8 @@ extension Converter {
                 case .failure(let failure): return failure.outcome
                 }
                 if doc.pageCount > maxPages {
-                    convertLog.info("\(source.lastPathComponent, privacy: .public): \(pagesSkipped(doc.pageCount - maxPages, max: maxPages), privacy: .public)")
+                    let file = source.lastPathComponent
+                    convertLog.info("\(file, privacy: .private): \(pagesSkipped(doc.pageCount - maxPages, max: maxPages), privacy: .public)")
                 }
                 var pages: [String] = [], spent = 0
                 for i in 0..<min(doc.pageCount, maxPages) {
