@@ -50,6 +50,11 @@ public func progressLine(name: String, fraction: Double, index: Int, total: Int)
     return "Converting \(menuName(name)) \(percent)% (\(index) of \(total))"
 }
 
+/// The Last line after a progress update: `running` is the newest drop still converting; it never replaces "Cancelling…".
+public func lineAfterProgress(_ line: String, cancelling: Bool, running: Bool, last: String) -> String {
+    running && !cancelling ? line : last
+}
+
 /// One-line menu text for a batch; names files only, never full paths.
 public struct BatchSummary {
     public let outputs: [URL]

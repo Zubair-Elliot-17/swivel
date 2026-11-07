@@ -204,3 +204,14 @@ func menuNameOfNothingVisibleIsFile(_ name: String) {
     #expect(BatchSummary([.failed(source: url("a.png"), reason: menuReason(for: quoted))]).menuLine
         == "Failed: a.png: can't open xgnp.exenow (0 of 1 converted)")
 }
+
+// M7 review F5 (mutant M8): only the running newest batch writes progress, and never over "Cancelling…".
+@Test(arguments: [
+    (false, true, "Last: none", "Converting a.mov 50% (1 of 1)"),
+    (true, true, "Cancelling…", "Cancelling…"),
+    (false, false, "Last: b.png (1 of 1)", "Last: b.png (1 of 1)"),  // finished, or not the newest drop
+    (true, false, "Cancelling…", "Cancelling…"),
+])
+func progressNeverOverwritesCancelling(cancelling: Bool, running: Bool, last: String, expected: String) {
+    #expect(lineAfterProgress("Converting a.mov 50% (1 of 1)", cancelling: cancelling, running: running, last: last) == expected)
+}

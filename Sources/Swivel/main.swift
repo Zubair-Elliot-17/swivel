@@ -201,7 +201,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Progress from the owning batch while it runs; once finished it keeps its summary.
     private func showProgress(_ line: String, for id: UUID) {
-        if lineOwner == id, drops[id] != nil, !cancelling { lastDropLine.title = line }
+        lastDropLine.title = lineAfterProgress(line, cancelling: cancelling, running: lineOwner == id && drops[id] != nil, last: lastDropLine.title)
     }
 
     @objc private func cancelConversions() {
