@@ -35,13 +35,16 @@ final class SettingsWindow {
 
 /// Row logic for one kind's slice list: visible in order, then hidden in default order (toggle off).
 enum LayoutRows {
+    /// `kind` is part of the List id: Video and Audio share M4A and WAV.
     struct Row: Hashable {
         let name: String
         let isOn: Bool
+        let kind: FileKind
     }
 
     static func rows(visible: [String], kind: FileKind) -> [Row] {
-        visible.map { Row(name: $0, isOn: true) } + kind.known.filter { !visible.contains($0) }.map { Row(name: $0, isOn: false) }
+        visible.map { Row(name: $0, isOn: true, kind: kind) }
+            + kind.known.filter { !visible.contains($0) }.map { Row(name: $0, isOn: false, kind: kind) }
     }
 
     /// On appends a hidden slice; off removes one, except the last visible.

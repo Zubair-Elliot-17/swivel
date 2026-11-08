@@ -17,6 +17,13 @@ import SwivelCore
     #expect(rows.map(\.isOn) == [true, true, false, false, false, false])
 }
 
+// The Settings List keys rows by value: Video and Audio both have M4A and WAV, and equal ids made
+// a click on Audio's M4A change the Video wheel (z-test U8).
+@Test func rowIdsAreUniqueAcrossKinds() {
+    let all = FileKind.allCases.flatMap { LayoutRows.rows(visible: $0.known, kind: $0) }
+    #expect(Set(all).count == all.count)
+}
+
 @Test func turningAHiddenRowOnAppendsIt() {
     #expect(LayoutRows.toggled(["WAV", "MP4"], "HEVC", on: true) == ["WAV", "MP4", "HEVC"])
     #expect(LayoutRows.toggled(["WAV", "MP4"], "MP4", on: true) == ["WAV", "MP4"])
