@@ -149,3 +149,8 @@ P3s from the M2 review (2026-10-25). None blocks M2.
 - **Tag check is local only** (`release.sh:20`): also check `git ls-remote --tags origin v1.0.0`.
 - **Off-main release.sh builds a shippable-looking zip** (`release.sh`): label the output "not a release" (its CFBundleVersion follows the branch's commit count).
 - **Esc under VoiceOver polls `keyState` at 30 Hz** (`WheelPanel.swift:319`): a tap under 33 ms can be missed; latch with `secondsSinceLastEventType`, and keep U6 as the check.
+
+## M7 test (P3)
+- **Settings row id includes `isOn`** (`SettingsWindow.swift:39`): toggling gives the row a new identity, so SwiftUI reinserts it (focus can drop). Make `Row` Identifiable on kind + name.
+- **Esc under VoiceOver is polled at 30 Hz** (`WheelPanel.swift:51`): a held press always lands (U6 5/5); a 0 ms synthetic Esc can slip between polls. Fine for people; revisit only if a scripted client needs it.
+- **"Cancelling…" lasts under a second** (`main.swift:210`): only seen through the `lineAfterProgress` test; the menu can't be reopened fast enough to catch it on a 1080p HEVC cancel.
