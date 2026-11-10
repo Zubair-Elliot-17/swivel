@@ -21,7 +21,7 @@ A Mac menu-bar file converter. Start dragging a file, tap a modifier key, and a 
 
 **Launch video (22s, with sound):** drag a photo and drop it on PNG, turn a clip into a GIF with one click, and pull the text out of a scanned recipe. All real recordings of Swivel 1.0.
 
-<a href="docs/launch-video.mp4"><img src="docs/launch-video.jpg" width="640" alt="Launch video: Swivel's wheel open mid-drag over a Finder window, captioned Tap Shift mid-drag. The wheel opens."></a>
+https://github.com/user-attachments/assets/9d1f1ec9-2b82-42fd-9feb-8c5fa9477b33
 
 |                 |                                                                                                   |
 | --------------- | ------------------------------------------------------------------------------------------------- |
