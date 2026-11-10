@@ -32,7 +32,9 @@ private func textOf(_ outcome: Outcome) throws -> String? {
     let source = try textPDF((1...101).map { "Page \($0)" }, in: dir, name: tag)
     let pages = try #require(try textOf(await Converter.extractText(source))).components(separatedBy: "\n\n")
     #expect(pages.count == 100 && pages.first == "Page 1" && pages.last == "Page 100")
-    #expect(try loggedLines(containing: "\(tag).pdf: 1 page skipped (max 100)").count == 1)
+    // Names are logged private (M7), so each cap message is unique across the suite and the name never shows.
+    #expect(try loggedLines(containing: "<private>: 1 page skipped (max 100)").count == 1)
+    #expect(try loggedLines(containing: tag).isEmpty)
 }
 
 // Accepted deviation: blank pages are dropped, so no run of blank lines appears between pages.
@@ -92,7 +94,7 @@ private func textOf(_ outcome: Outcome) throws -> String? {
     let source = try writePDF(in: dir, name: tag, pages: 100, size: CGSize(width: 10, height: 10))
     guard case .converted(_, let outputs, _) = await Converter.convert(source, to: .png) else { Issue.record("not converted"); return }
     #expect(outputs.count == 100 && outputs.last?.lastPathComponent == "\(tag) page 100.png")
-    #expect(try loggedLines(containing: "\(tag).pdf:").isEmpty)
+    #expect(try loggedLines(containing: ": 0 pages skipped").isEmpty)
 }
 
 // AC 5/6: a later source's frames keep their own media box (catches beginPDFPage(nil) reusing the default box).

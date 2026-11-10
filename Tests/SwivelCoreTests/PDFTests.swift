@@ -207,18 +207,19 @@ func lossySourcesBecomeJPEGPages(format: ImageFormat) async throws {
         .skipped(source: sources[2], .pageLimit),
     ])
     #expect(try PDFReadBack(out).pageSizes.count == 2)
-    #expect(try loggedLines(containing: "cap\(tag)-3.png: 1 page skipped (max 2)").count == 1)
+    #expect(try loggedLines(containing: "<private>: 1 page skipped (max 2)").count == 1)
 }
 
 @Test func sourceCutPartWayCountsAsConverted() async throws {
     let dir = try makeScratch()
     defer { cleanUp(dir) }
     let tag = UUID().uuidString.prefix(8)
-    let source = try writeTIFF(frames: 3, in: dir, name: "cut\(tag)")
+    // Names are logged private, so each asserted cap message must be unique in the suite: max 4 is this test's.
+    let source = try writeTIFF(frames: 5, in: dir, name: "cut\(tag)")
     let out = dir.appendingPathComponent("cut\(tag).pdf")
-    #expect(await Converter.makePDF([source], maxPages: 2) == [.converted(source: source, outputs: [out], complete: false)])
-    #expect(try PDFReadBack(out).pageSizes.count == 2)
-    #expect(try loggedLines(containing: "cut\(tag).tiff: 1 page skipped (max 2)").count == 1)
+    #expect(await Converter.makePDF([source], maxPages: 4) == [.converted(source: source, outputs: [out], complete: false)])
+    #expect(try PDFReadBack(out).pageSizes.count == 4)
+    #expect(try loggedLines(containing: "<private>: 1 page skipped (max 4)").count == 1)
 }
 
 @Test func oversizedFrameFailsOnlyItsSource() async throws {
@@ -355,11 +356,11 @@ func pdfPagesBecomeImagesAt150DPI(target: ImageFormat) async throws {
     let dir = try makeScratch()
     defer { cleanUp(dir) }
     let tag = "long\(UUID().uuidString.prefix(8))"
-    let source = try writePDF(in: dir, name: tag, pages: 101, size: CGSize(width: 10, height: 10))
+    let source = try writePDF(in: dir, name: tag, pages: 102, size: CGSize(width: 10, height: 10))  // 102: unlike the text cap's message
     let got = names(await Converter.convert(source, to: .png))
     #expect(got.count == 100 && got.first == "\(tag) page 001.png" && got.last == "\(tag) page 100.png")
     #expect(try files(in: dir).count == 101)
-    #expect(try loggedLines(containing: "\(tag).pdf: 1 page skipped (max 100)").count == 1)
+    #expect(try loggedLines(containing: "<private>: 2 pages skipped (max 100)").count == 1)
 }
 
 @Test func rotatedPageIsRenderedUpright() async throws {
@@ -450,7 +451,7 @@ private func isComplete(_ outcome: Outcome) -> Bool? {
 @Test func pdfPastThePageCapIsIncomplete() async throws {
     let dir = try makeScratch()
     defer { cleanUp(dir) }
-    let source = try writePDF(in: dir, pages: 2)
+    let source = try writePDF(in: dir, pages: 4)  // 4: its log line must not match the bad-frame test's "1 page skipped (max 1)"
     #expect(isComplete(Converter.renderPDF(source, to: .png, quality: Converter.defaultQuality, maxPages: 1)) == false)
 }
 

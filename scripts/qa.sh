@@ -12,6 +12,7 @@ QA=dev.zubair.swivel.qa  # QA-mode settings suite; the user's dev.zubair.swivel 
 cleanup() { [ -d "$MNT" ] && hdiutil detach -quiet "$MNT" || true; rm -rf "$F"; defaults delete $QA 2>/dev/null || true; }
 trap cleanup EXIT
 defaults delete $QA 2>/dev/null || true
+USERSEEN=$(defaults read dev.zubair.swivel welcomeSeen 2>/dev/null || echo absent)  # read only; M7-4 compares it at the end
 echo "sha $(git rev-parse --short HEAD)$(git diff --quiet HEAD || echo '+dirty'), fixtures $F"
 
 fails=0
@@ -307,6 +308,31 @@ expect M6-M1 "$(tdrop PNG "$MNT/n61.jpg")" "Last: n61.png (1 of 1) (1 not moved 
 kept M6-M1 "$MNT/n61.jpg"
 [ -e "$MNT/n61.png" ] && pass "M6-M1 output" || fail M6-M1 "n61.png not written"
 defaults delete $QA 2>/dev/null || true
+
+# M7-1: the bundle QA tests is the one that ships: hardened runtime, apple-events entitlement, Swivel Dev DR.
+out=$("$ROOT/scripts/check-app.sh" sign "$ROOT/build/Swivel.app") && pass M7-1 || fail M7-1 "$(echo $out)"
+
+# M7-2: version, icon, copyright and libwebp credits in the bundle; the icon reads back at every size.
+out=$("$ROOT/scripts/check-app.sh" bundle "$ROOT/build/Swivel.app") && pass M7-2 || fail M7-2 "$(echo $out)"
+
+# M7-3: bidi and newline characters never reach the menu line; the output keeps the real name.
+rlo=$'x\xe2\x80\xaey' lf=$'a\nb'
+mkdir m73 && cp a.jpg "m73/$rlo.jpg" && cp a.jpg "m73/$lf.jpg"
+expect "M7-3 RLO" "$(drop PNG "m73/$rlo.jpg")" "Last: xy.png (1 of 1)"
+# Unfixed, the newline splits the printed line and tail -1 keeps only its second half.
+expect "M7-3 LF" "$(drop PNG "m73/$lf.jpg")" "Last: ab.png (1 of 1)"
+[ -e "m73/$rlo.png" ] && [ -e "m73/$lf.png" ] && pass "M7-3 real names" || fail "M7-3 real names" "$(ls m73 | tr '\n' '|')"
+
+# M7-7: no file name, path or error text is logged public (AC 7); only the reviewed public sites remain.
+# drop slice= stays: its slice is public, its urls part is .private.
+leak=$(grep -rnE 'privacy: \.public' "$ROOT/Sources" | grep -E 'lastPathComponent|\.path|paths|names|urls|name,|\(name|detail|error|Description|errorMessage|dir\b' | grep -v 'drop slice=' || true)
+expect "M7-7 no public names" "$leak" ""
+sites=$(grep -rn 'privacy: .public' "$ROOT/Sources" | sed "s|^$ROOT/Sources/||" | cut -d: -f1 | sort | uniq -c | tr -s ' ' | tr '\n' ';')
+expect "M7-7 public sites" "$sites" " 1 Swivel/DragMonitor.swift; 2 Swivel/FinderTap.swift; 3 Swivel/main.swift; 1 SwivelCore/PDFMaker.swift; 2 SwivelCore/PDFRender.swift; 1 SwivelCore/TextExtract.swift;"
+
+# M7-4: QA runs never touch welcomeSeen: the user's value is unchanged and the QA suite (fresh since M6-M1) has none.
+expect "M7-4 user welcomeSeen" "$(defaults read dev.zubair.swivel welcomeSeen 2>/dev/null || echo absent)" "$USERSEEN"
+expect "M7-4 QA welcomeSeen" "$(defaults read $QA welcomeSeen 2>/dev/null || echo absent)" absent
 
 echo "$fails failed"
 exit $((fails > 0))

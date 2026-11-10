@@ -17,6 +17,13 @@ import SwivelCore
     #expect(rows.map(\.isOn) == [true, true, false, false, false, false])
 }
 
+// The Settings List keys rows by value: Video and Audio both have M4A and WAV, and equal ids made
+// a click on Audio's M4A change the Video wheel (z-test U8).
+@Test func rowIdsAreUniqueAcrossKinds() {
+    let all = FileKind.allCases.flatMap { LayoutRows.rows(visible: $0.known, kind: $0) }
+    #expect(Set(all).count == all.count)
+}
+
 @Test func turningAHiddenRowOnAppendsIt() {
     #expect(LayoutRows.toggled(["WAV", "MP4"], "HEVC", on: true) == ["WAV", "MP4", "HEVC"])
     #expect(LayoutRows.toggled(["WAV", "MP4"], "MP4", on: true) == ["WAV", "MP4"])
@@ -161,4 +168,11 @@ func triggerKeysRoundTrip(_ keys: TriggerKeys) {
 
 @Test func triggerPickerNamesEveryChoice() {
     #expect(TriggerKeys.allCases.map(TriggerSetting.label) == ["Shift", "Control", "Shift or Control"])
+}
+
+// M7 AC 12: each slice toggle names its wheel. In-process AX of NSHostingView exposes no labels (probed), so U8 checks the tree.
+@Test(arguments: [(FileKind.image, "PNG", "Show PNG on the Images wheel"), (.video, "MP4", "Show MP4 on the Video wheel"),
+                  (.audio, "WAV", "Show WAV on the Audio wheel")])
+func sliceToggleLabelNamesTheWheel(kind: FileKind, name: String, label: String) {
+    #expect(SettingsView.toggleLabel(name, kind: kind) == label)
 }

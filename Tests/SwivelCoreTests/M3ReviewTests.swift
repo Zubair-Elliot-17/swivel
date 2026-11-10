@@ -97,7 +97,7 @@ private func megapixelPages(in dir: URL, name: String) throws -> URL {
         Issue.record("not converted"); return
     }
     #expect(outputs.map(\.lastPathComponent) == ["\(tag) page 1.png", "\(tag) page 2.png"])
-    #expect(try loggedLines(containing: "\(tag).pdf: 1 page skipped (max 2 MP)").count == 1)
+    #expect(try loggedLines(containing: "<private>: 1 page skipped (max 2 MP)").count == 1)
 }
 
 @Test func firstPageOverThePixelBudgetWritesNothing() async throws {
@@ -113,9 +113,10 @@ private func megapixelPages(in dir: URL, name: String) throws -> URL {
     let dir = try makeScratch()
     defer { cleanUp(dir) }
     let tag = "ocrbudget\(UUID().uuidString.prefix(8))"
-    let source = try writePDF(in: dir, name: tag, pages: 3, size: CGSize(width: 240, height: 240))
+    let source = try writePDF(in: dir, name: tag, pages: 4, size: CGSize(width: 240, height: 240))
     #expect(await Converter.extractText(source, maxPixels: 2_000_000) == .skipped(source: source, .noText))
-    #expect(try loggedLines(containing: "\(tag).pdf: 1 page skipped (max 2 MP)").count == 1)
+    // 4 pages, not 3: the message must differ from the render budget test's, since the name is private.
+    #expect(try loggedLines(containing: "<private>: 2 pages skipped (max 2 MP)").count == 1)
 }
 
 // MARK: F3 combined PDF streams to a temp file
@@ -181,7 +182,7 @@ private func tiffWithBrokenSecondFrame(in dir: URL, name: String) throws -> URL 
     let out = dir.appendingPathComponent("\(tag).pdf")
     #expect(await Converter.makePDF([source], maxPages: 1) == [.converted(source: source, outputs: [out], complete: false)])
     #expect(try PDFReadBack(out).pageSizes == [CGSize(width: 16, height: 8)])
-    #expect(try loggedLines(containing: "\(tag).tiff: 1 page skipped (max 1)").count == 1)
+    #expect(try loggedLines(containing: "<private>: 1 page skipped (max 1)").count == 1)
 }
 
 @Test func sourceWithNoRoomIsSkippedWithoutReadingFrames() async throws {

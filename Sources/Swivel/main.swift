@@ -18,10 +18,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var drops: [UUID: Task<Void, Never>] = [:]  // running batches, for Cancel conversions
     private var dropURLs: [UUID: [URL]] = [:]  // what each running batch uses, so trashing skips a file another drop holds
     private var lineOwner: UUID?  // the newest drop; only it writes the Last line and Reveal
+    private var cancelling = false  // after Cancel conversions, until all batches end or a new drop starts
     private var qaMode = false
     private let defaults = AppDefaults.make(environment: ProcessInfo.processInfo.environment)
     private lazy var settings = SettingsWindow(defaults: defaults)
     private let loginItem = LoginItem()
+    private let qa = ProcessInfo.processInfo.environment["SWIVEL_QA"] == "1"
+    private let translocated = Launch.isTranslocated(Bundle.main.bundlePath)
+    private lazy var welcome = WelcomeWindow(
+        defaults: defaults, model: WelcomeModel(translocated: translocated, loginDisabled: translocated))
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -41,6 +46,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         enableTapItem.target = self
         menu.addItem(enableTapItem)
         menu.addItem(.separator())
+        let welcomeItem = NSMenuItem(title: "Welcome…", action: #selector(openWelcome), keyEquivalent: "")
+        welcomeItem.target = self
+        menu.addItem(welcomeItem)
+        let aboutItem = NSMenuItem(title: "About Swivel", action: #selector(about), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
+        loginItem.disabled = translocated
         menu.addItem(loginItem.menuItem)
         let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
@@ -65,8 +77,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         finderTap.isDragLive = { dragMonitor.isLive }
         finderTap.dismissWheel = { wheel.hideClickMode() }
         finderTap.onTap = { wheel.showForClick(at: $0, urls: $1) }
-        finderTap.onStatus = { [tapLine, enableTapItem] status in
+        welcome.model.enableTap = { finderTap.enable() }
+        welcome.bindLogin(loginItem)
+        finderTap.onStatus = { [tapLine, enableTapItem, welcome] status in
             tapLine.title = status.menuLine
+            welcome.model.tapLine = status.menuLine
             // nothingSelected means access is granted, so there is nothing to enable.
             enableTapItem.isEnabled = status == .needsAccess || status == .denied
         }
@@ -75,11 +90,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // QA entry point for scripts/qa.sh: SWIVEL_QA=1 Swivel --qa-drop <slice> <path>... runs one drop, prints the menu line, quits.
         let args = CommandLine.arguments
-        if ProcessInfo.processInfo.environment["SWIVEL_QA"] == "1", args.count > 2, args[1] == "--qa-drop" {
+        if qa, args.count > 2, args[1] == "--qa-drop" {
             qaMode = true
             drop(args[2], args.dropFirst(3).map { URL(fileURLWithPath: $0) })
             if busy == 0 { NSApp.terminate(nil) }  // unknown slice: nothing started
+        } else if Launch.welcomeAtLaunch(defaults, qa: qa, translocated: translocated) {
+            openWelcome()
         }
+    }
+
+    /// Opening Swivel again while it runs shows the welcome window (the menu-bar icon can hide behind the notch).
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openWelcome()
+        return false
     }
 
     /// Key equivalents need a main menu: Cmd-, opens Settings and Cmd-W closes it while it is key.
@@ -100,20 +123,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         loginItem.refresh()  // the user can change it in System Settings at any time
     }
 
+    @objc private func openWelcome() {
+        welcome.show(loginOn: loginItem.isOn)
+    }
+
     @objc private func openSettings() {
         settings.show()
+    }
+
+    /// The standard panel reads the version, Credits.rtf and the copyright from the bundle.
+    @objc private func about() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(nil)
     }
 
     @objc private func enableTap() {
         finderTap?.enable()
     }
 
-    private func drop(_ name: String, _ urls: [URL]) {
+    private func drop(_ slice: String, _ urls: [URL]) {
         let paths = urls.map(\.path)
-        log.info("drop slice=\(name, privacy: .public) urls=\(paths.joined(separator: ", "), privacy: .public)")
+        log.info("drop slice=\(slice, privacy: .public) urls=\(paths.joined(separator: ", "), privacy: .private)")
         let id = UUID()
         let job: @Sendable () async -> [Outcome]
-        switch (ImageFormat(rawValue: name), AVTarget(rawValue: name), name) {
+        switch (ImageFormat(rawValue: slice), AVTarget(rawValue: slice), slice) {
         case (let format?, _, _):
             let quality = QualitySetting.read(defaults)  // once per drop, so a batch never mixes qualities
             job = { await Converter.convertBatch(urls, to: format, quality: quality) }
@@ -134,11 +167,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case (nil, nil, "PDF"): job = { await Converter.makePDF(urls) }
         case (nil, nil, "Text"): job = { await Converter.textBatch(urls) }
         default:
-            log.info("drop on unknown slice \(name, privacy: .public)")
+            log.info("drop on unknown slice \(slice, privacy: .public)")
             return
         }
         let trash = TrashSetting.read(defaults)  // once per drop, like quality
         busy += 1
+        cancelling = false
         updateIcon()
         lineOwner = id
         dropURLs[id] = urls
@@ -147,7 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             dropURLs[id] = nil
             for outcome in outcomes { logOutcome(outcome) }
             // Still in `drops` here, so Cancel during the trash step stops it.
-            let notTrashed = await TrashRun.afterBatch(outcomes, slice: name, enabled: trash) { self.dropURLs.values.flatMap { $0 } }
+            let notTrashed = await TrashRun.afterBatch(outcomes, slice: slice, enabled: trash) { self.dropURLs.values.flatMap { $0 } }
             drops[id] = nil  // before the summary, so a late progress hop can't overwrite it
             let summary = BatchSummary(outcomes, notTrashed: notTrashed)
             if lineOwner == id {
@@ -156,6 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 revealItem.isEnabled = !revealTargets.isEmpty
             }
             busy -= 1
+            if busy == 0 { cancelling = false }
             updateIcon()
             if qaMode {
                 print(summary.menuLine)
@@ -166,27 +201,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Progress from the owning batch while it runs; once finished it keeps its summary.
     private func showProgress(_ line: String, for id: UUID) {
-        if lineOwner == id, drops[id] != nil { lastDropLine.title = line }
+        lastDropLine.title = lineAfterProgress(line, cancelling: cancelling, running: lineOwner == id && drops[id] != nil, last: lastDropLine.title)
     }
 
     @objc private func cancelConversions() {
         for task in drops.values { task.cancel() }
+        // The newest batch's summary replaces this line; a finished one keeps its summary.
+        if let owner = lineOwner, drops[owner] != nil { lastDropLine.title = "Cancelling…" }
+        cancelling = true
+        updateIcon()
     }
 
     private func logOutcome(_ outcome: Outcome) {
         switch outcome {
         case .converted(let source, let outputs, _):
             let names = outputs.map(\.lastPathComponent).joined(separator: ", ")
-            log.info("converted \(source.lastPathComponent, privacy: .public) -> \(names, privacy: .public)")
+            log.info("converted \(source.lastPathComponent, privacy: .private) -> \(names, privacy: .private)")
         case .skipped(let source, let reason):
-            log.info("skipped \(source.lastPathComponent, privacy: .public): \(reason.description, privacy: .public)")
+            let file = source.lastPathComponent
+            log.info("skipped \(file, privacy: .private): \(reason.description, privacy: .public)")
         case .failed(let source, let reason, let detail):
-            log.info("failed \(source.lastPathComponent, privacy: .public): \(detail ?? reason, privacy: .public)")
+            log.info("failed \(source.lastPathComponent, privacy: .private): \(detail ?? reason, privacy: .private)")
         }
     }
 
     private func updateIcon() {
-        cancelItem.isEnabled = busy > 0
+        cancelItem.isEnabled = busy > 0 && !cancelling
         statusItem.button?.image = busy > 0
             ? NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: "Swivel, converting")
             : NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Swivel")

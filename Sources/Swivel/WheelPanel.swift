@@ -48,12 +48,14 @@ final class WheelPanel {
         view.clickURLs = urls
         place(at: point)
         // Finder keeps the keys, so arrows or typing would change its selection under the wheel: hide on any keyDown (not under VoiceOver).
+        // Esc (key code 53) hides it either way; the panel is never key, so its state is polled.
         let opened = ProcessInfo.processInfo.systemUptime
         let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 let sinceKey = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown)
                 if TapRule.keyTyped(sinceKeyDown: sinceKey, elapsed: ProcessInfo.processInfo.systemUptime - opened,
-                                    voiceOver: NSWorkspace.shared.isVoiceOverEnabled) {
+                                    voiceOver: NSWorkspace.shared.isVoiceOverEnabled,
+                                    escape: CGEventSource.keyState(.combinedSessionState, key: 53)) {
                     self?.hide()
                 }
             }

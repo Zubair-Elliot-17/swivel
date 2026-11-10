@@ -163,3 +163,55 @@ func notTrashedSuffix(outcomes: [Outcome], notTrashed: Int, expected: String) {
     #expect(s.menuLine == "Last: multi.png (1 of 1)")
     #expect(s.converted == 1 && s.outputs == [url("multi.png")])
 }
+
+// MARK: Menu names (M7 AC 8): control, format and separator characters never reach the menu.
+
+@Test(arguments: [
+    "\u{0}", "\u{1F}", "\n", "\r", "\t", "\u{7F}", "\u{85}", "\u{9F}",  // C0, DEL, C1
+    "\u{200B}", "\u{200E}", "\u{200F}", "\u{061C}",  // zero width space, LRM/RLM, ALM
+    "\u{202A}", "\u{202B}", "\u{202C}", "\u{202D}", "\u{202E}",  // bidi embeddings, overrides
+    "\u{2066}", "\u{2067}", "\u{2068}", "\u{2069}",  // bidi isolates
+    "\u{2028}", "\u{2029}", "\u{FEFF}",  // line/paragraph separators, BOM
+])
+func menuNameStripsInvisibleCharacters(_ c: String) {
+    #expect(menuName("x\(c)y.jpg") == "xy.jpg")
+}
+
+// ZWJ and ZWNJ join emoji and shape Persian and Indic names (M7 review F3).
+@Test(arguments: ["café.png", "cafe\u{301}.png", "🙂 photo.png", "my  file .png", "日本語.heic", "a-b_c (2).mov",
+                  "👨\u{200D}👩\u{200D}👧 family.png", "می\u{200C}خواهم.png", "क्\u{200D}ष.jpg"])
+func menuNameKeepsVisibleText(_ name: String) {
+    #expect(menuName(name) == name)
+}
+
+@Test(arguments: ["", "\u{202E}", "\n\u{200B}\u{FEFF}", "\u{200D}", "\u{200C}\u{202E}\u{200D}"])
+func menuNameOfNothingVisibleIsFile(_ name: String) {
+    #expect(menuName(name) == "file")
+}
+
+@Test func menuLinesUseMenuNames() {
+    let rlo = url("x\u{202E}gnp.exe"), lf = url("a\nb.png")
+    #expect(BatchSummary([.converted(source: rlo, outputs: [lf])]).menuLine == "Last: ab.png (1 of 1)")
+    #expect(BatchSummary([.failed(source: rlo, reason: "disk full")]).menuLine == "Failed: xgnp.exe: disk full (0 of 1 converted)")
+    #expect(progressLine(name: "a\nb.mov", fraction: 0.5, index: 1, total: 1) == "Converting ab.mov 50% (1 of 1)")
+    // Reveal still gets the real URL.
+    #expect(BatchSummary([.converted(source: rlo, outputs: [lf])]).outputs == [lf])
+}
+
+// M7 review F2: an error's text can quote a file name, so the reason gets the same cleaning.
+@Test func failedReasonUsesMenuName() {
+    let quoted = NSError(domain: "x", code: 1, userInfo: [NSLocalizedDescriptionKey: "can't open x\u{202E}gnp.exe\nnow"])
+    #expect(BatchSummary([.failed(source: url("a.png"), reason: menuReason(for: quoted))]).menuLine
+        == "Failed: a.png: can't open xgnp.exenow (0 of 1 converted)")
+}
+
+// M7 review F5 (mutant M8): only the running newest batch writes progress, and never over "Cancelling…".
+@Test(arguments: [
+    (false, true, "Last: none", "Converting a.mov 50% (1 of 1)"),
+    (true, true, "Cancelling…", "Cancelling…"),
+    (false, false, "Last: b.png (1 of 1)", "Last: b.png (1 of 1)"),  // finished, or not the newest drop
+    (true, false, "Cancelling…", "Cancelling…"),
+])
+func progressNeverOverwritesCancelling(cancelling: Bool, running: Bool, last: String, expected: String) {
+    #expect(lineAfterProgress("Converting a.mov 50% (1 of 1)", cancelling: cancelling, running: running, last: last) == expected)
+}

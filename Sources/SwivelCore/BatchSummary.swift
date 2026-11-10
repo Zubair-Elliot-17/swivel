@@ -29,11 +29,30 @@ public func menuReason(for error: Error) -> String {
     }
 }
 
+/// A file name safe for a menu line: control, format (bidi, zero-width) and separator characters dropped,
+/// except ZWNJ/ZWJ, which join emoji and shape scripts; nothing visible left reads "file".
+public func menuName(_ s: String) -> String {
+    let joiners: Set<Unicode.Scalar> = ["\u{200C}", "\u{200D}"]
+    let kept = s.unicodeScalars.filter {
+        if joiners.contains($0) { return true }
+        switch $0.properties.generalCategory {
+        case .control, .format, .lineSeparator, .paragraphSeparator: return false
+        default: return true
+        }
+    }
+    return kept.allSatisfy(joiners.contains) ? "file" : String(String.UnicodeScalarView(kept))
+}
+
 /// Menu text while a batch runs, e.g. "Converting clip.mov 42% (2 of 5)"; the fraction is clamped and NaN reads 0%.
 public func progressLine(name: String, fraction: Double, index: Int, total: Int) -> String {
     let f = fraction.isNaN ? 0 : min(max(fraction, 0), 1)
     let percent = Int(exactly: (f * 100).rounded(.down)) ?? 0
-    return "Converting \(name) \(percent)% (\(index) of \(total))"
+    return "Converting \(menuName(name)) \(percent)% (\(index) of \(total))"
+}
+
+/// The Last line after a progress update: `running` is the newest drop still converting; it never replaces "Cancelling…".
+public func lineAfterProgress(_ line: String, cancelling: Bool, running: Bool, last: String) -> String {
+    running && !cancelling ? line : last
 }
 
 /// One-line menu text for a batch; names files only, never full paths.
@@ -67,9 +86,9 @@ public struct BatchSummary {
         let trashNote = notTrashed > 0 ? " (\(notTrashed) not moved to Trash)" : ""
         let line: String
         if let (source, reason) = failure {
-            line = "Failed: \(source.lastPathComponent): \(reason) (\(converted) of \(total) converted\(skipNote))"
+            line = "Failed: \(menuName(source.lastPathComponent)): \(menuName(reason)) (\(converted) of \(total) converted\(skipNote))"
         } else if let last = outputs.last {
-            line = "Last: \(last.lastPathComponent) (\(converted) of \(total)\(skipNote))"
+            line = "Last: \(menuName(last.lastPathComponent)) (\(converted) of \(total)\(skipNote))"
         } else if let first = skips.first {
             line = "Skipped \(total) of \(total): \(first)"
         } else {
